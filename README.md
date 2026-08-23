@@ -42,28 +42,35 @@ In Web3 bug bounty (Immunefi, Cantina, Code4rena, Sherlock), **theoretical alert
 
 ```mermaid
 graph TD
-    subgraph UI & Entry
+    subgraph UI_Layer ["UI & Entry"]
         CLI["CLI: hunt [target]"]
         TUI["Pi TUI: /hunt [target]"]
     end
 
-    subgraph Pi Agent (Cognitive Layer)
+    subgraph Agent_Layer ["Pi Agent (Cognitive Layer)"]
         XRAY["X-Ray Threat Modeling"]
         INVAR["Invariant & Hypothesis Synthesis"]
         POC_GEN["Foundry Exploit PoC Drafting"]
     end
 
-    subgraph Effect-TS Services (Deterministic Muscle & Arbiter)
+    subgraph Effect_Layer ["Effect-TS Services (Deterministic Muscle & Arbiter)"]
         MULTI["MultiChainService (9 EVM Networks & Public RPCs)"]
         FORK["ForkService (Scoped Ephemeral Anvil Lifecycle)"]
-        SCAN["ScannerService (Forge, Slither, Aderyn, Halmos, Echidna, Medusa)"]
+        SCAN["ScannerService (Forge, Slither, Aderyn, Halmos)"]
         POC["PoCService (Anti-Cheat & State Delta Verification)"]
         AUDIT["DetachedAuditorService (Isolated 7-Gate Arbiter)"]
         LEDGER["LedgerService (SHA-256 Hash-Chained Event Sourcing)"]
     end
 
-    CLI & TUI --> Pi Agent
-    Pi Agent <--> MULTI & FORK & SCAN & POC & AUDIT & LEDGER
+    CLI --> Agent_Layer
+    TUI --> Agent_Layer
+    Agent_Layer --> XRAY
+    XRAY --> INVAR
+    INVAR --> SCAN
+    INVAR --> POC_GEN
+    POC_GEN --> POC
+    POC --> FORK
+    POC --> AUDIT
     AUDIT --> LEDGER
     LEDGER --> REPORT["Verified Bounty Report (Immunefi / Cantina)"]
 ```
