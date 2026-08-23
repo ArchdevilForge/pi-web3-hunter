@@ -1,6 +1,6 @@
 {
   "name": "pi-web3-hunter",
-  "version": "0.1.0+codex.20260823110541",
+  "version": "0.1.0+codex.20260823111009",
   "description": "Scope-gated Web3 security hunting with reproducible evidence.",
   "author": {
     "name": "ArchdevilForge"

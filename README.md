@@ -24,6 +24,10 @@ The allowlist covers `forge build`, filtered `forge test`, Slither, Echidna,
 Medusa, and read-only `cast code`. It never accepts an arbitrary command or
 runs a script from the target repository by path.
 
+The bundled Fizz/X-Ray helper scripts are optional advanced workflows. They
+need Pi's `bash` tool, so enable them only inside the container/VM; they resolve
+scripts from this installed package, never from the target's current directory.
+
 ## Interactive
 
 ```text

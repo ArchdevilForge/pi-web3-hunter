@@ -111,11 +111,20 @@ if (fs.existsSync(selectionPath)) {
 
 const preselectedMap = buildSelectedMap(defaultSelection);
 
+function scriptJSON(value) {
+    return JSON.stringify(value)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
 // ――――――――――――――――――――――――― HTML page ―――――――――――――――――――――――――
 
 function buildHTML(contracts, serverURL, preselectedMap) {
-    const contractsJSON = JSON.stringify(contracts);
-    const preselectedJSON = JSON.stringify(
+    const contractsJSON = scriptJSON(contracts);
+    const preselectedJSON = scriptJSON(
         Array.from(preselectedMap.entries()).map(([key, value]) => ({
             key,
             functions: Array.from(value.functions),
@@ -318,7 +327,7 @@ function buildSelectionFingerprint(selection) {
   })));
 }
 
-const defaultFingerprint = buildSelectionFingerprint(${JSON.stringify(defaultSelection)});
+const defaultFingerprint = buildSelectionFingerprint(${scriptJSON(defaultSelection)});
 
 function render() {
   const container = document.getElementById('contracts');

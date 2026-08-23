@@ -112,10 +112,10 @@ fi
 
 # 3. Check forge-std is installed (required by FoundryTester.sol)
 if [ ! -d "$PROJECT_ROOT/lib/forge-std" ]; then
-    echo "forge-std not found — installing..."
-    cd "$PROJECT_ROOT"
-    forge install foundry-rs/forge-std
-    echo "forge-std installed."
+    echo "ERROR: forge-std not found at $PROJECT_ROOT/lib/forge-std."
+    echo "Install and review the dependency explicitly before running Fizz:"
+    echo "  https://book.getfoundry.sh/projects/dependencies"
+    exit 1
 else
     echo "forge-std detected."
 fi
