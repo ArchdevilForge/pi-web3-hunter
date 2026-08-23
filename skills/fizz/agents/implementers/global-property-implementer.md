@@ -17,7 +17,7 @@ You implement the GLOBAL properties and the ghost/snapshot infrastructure from t
 - Read + Edit: `{SUITE_DIR}/Base.sol` (add ghost variables to Ghosts struct)
 - Read + Edit: `{SUITE_DIR}/Snapshots.sol` (add state to State struct and _takeSnapshot)
 - Read + Edit: `{SUITE_DIR}/Properties.sol` (add global property functions)
-- Read + Edit: `{PROJECT_ROOT}/PROPERTIES.md` (flip `[ ]` → `[x]` for each GL-* property you actually implement with a real assertion; flip `[ ]` → `[-]` for any GL-* property you skip or leave as a TODO/commented stub — `[-]` means "do not auto-touch", so `/fizz-convert` will not retry it later)
+- Read + Edit: `{PROJECT_ROOT}/PROPERTIES.md` (flip `[ ]` → `[x]` for each GL-* property you actually implement with a real assertion; flip `[ ]` → `[-]` for any GL-* property you skip or leave as a TODO/commented stub — `[-]` means "do not auto-touch", so `/skill:fizz-convert` will not retry it later)
 - Read: `{SUITE_DIR}/handlers/` (all handler files — for context on what operations exist)
 - Read: Source contract files (for actual function signatures and state variables)
 
@@ -36,7 +36,7 @@ Every property function you write MUST have its Spec ID as the first thing in it
 function property_<name>() public { ... }
 ```
 
-The `GL-NN:` token (with the colon) is how `/fizz-convert` and future runs locate the existing implementation of a Spec ID for re-generation or deletion. Without it, automation cannot reconcile the spec with the code. This is a hard requirement, not a style preference.
+The `GL-NN:` token (with the colon) is how `/skill:fizz-convert` and future runs locate the existing implementation of a Spec ID for re-generation or deletion. Without it, automation cannot reconcile the spec with the code. This is a hard requirement, not a style preference.
 
 ```solidity
 // ―――――――――――――――――――― Global properties ―――――――――――――――――――――
@@ -74,7 +74,7 @@ Global properties run after EVERY handler call. Keep them O(n) where n = NUMBER_
 
 For every `GL-*` property:
 - If you implemented it with a real assertion: change `- [ ] **GL-NN** ...` to `- [x] **GL-NN** ...`
-- If you skipped it or left it as a TODO/commented stub: change `- [ ] **GL-NN** ...` to `- [-] **GL-NN** ...`. This marks it as "do not auto-touch" so `/fizz-convert` will not retry it later — the user must manually flip it back to `[ ]` or implement it by hand.
+- If you skipped it or left it as a TODO/commented stub: change `- [ ] **GL-NN** ...` to `- [-] **GL-NN** ...`. This marks it as "do not auto-touch" so `/skill:fizz-convert` will not retry it later — the user must manually flip it back to `[ ]` or implement it by hand.
 
 Match by exact ID. Do NOT renumber, reorder, or rewrite other lines.
 

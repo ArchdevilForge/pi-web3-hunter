@@ -398,7 +398,7 @@ After all 5 agents return, read the Synthesizer agent file:
 Replace `{AGENT_OUTPUTS}` with the outputs from roles 1-5, `{META_DIR}` with the actual `{META_DIR}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path, then execute the synthesizer with the current model.
 The Synthesizer merges, deduplicates, prioritizes, and writes BOTH:
 - `{PROJECT_ROOT}/{META_DIR}/property-plan.md` — implementation tables with stable Spec IDs (`GL-NN`, `SP-NN`)
-- `{PROJECT_ROOT}/PROPERTIES.md` — English-language spec with `[ ]` checkboxes, one entry per property, identified by the same Spec IDs. This is the artifact that the `/fizz-convert` command and the implementers in Step 9d operate on.
+- `{PROJECT_ROOT}/PROPERTIES.md` — English-language spec with `[ ]` checkboxes, one entry per property, identified by the same Spec IDs. This is the artifact that the `/skill:fizz-convert` command and the implementers in Step 9d operate on.
 
 Each property carries a **Guarantee** tag set at generation time — `SHOULD-HOLD` (explicitly guaranteed by docs/spec/standard or an exact identity, with evidence cited) or `EXPLORATORY` (inferred). This tag is what lets Step 10 triage a violation without post-campaign severity guessing: a violated SHOULD-HOLD property is a confirmed bug, a violated EXPLORATORY property is a lead for human review.
 
@@ -417,7 +417,7 @@ Read each agent file:
 
 Replace `{META_DIR}` with the actual `{META_DIR}` path, `{SKILL_PATH}` with the actual `{SKILL_PATH}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path. Run both roles concurrently when supported, otherwise sequentially with the current model.
 
-Both implementers MUST flip `[ ]` → `[x]` in `{PROJECT_ROOT}/PROPERTIES.md` for each property they actually implement (matching by Spec ID `GL-NN` / `SP-NN`). Properties left as TODO stubs stay `[ ]` so `/fizz-convert` can pick them up later.
+Both implementers MUST flip `[ ]` → `[x]` in `{PROJECT_ROOT}/PROPERTIES.md` for each property they actually implement (matching by Spec ID `GL-NN` / `SP-NN`). Properties left as TODO stubs stay `[ ]` so `/skill:fizz-convert` can pick them up later.
 
 ### Step 9e: Validate
 
@@ -528,7 +528,7 @@ The report-writer agent will also print the report content to the conversation (
 
 ### Snapshot For Future Re-Use
 
-After the final report is written, capture a sync snapshot so the `/fizz-sync` skill can detect drift on subsequent source changes without re-running the full pipeline:
+After the final report is written, capture a sync snapshot so the `/skill:fizz-sync` skill can detect drift on subsequent source changes without re-running the full pipeline:
 
 ```
 node {SKILL_PATH}/scripts/fizz_sync.js {PROJECT_ROOT} --init --meta-dir {META_DIR} --suite-dir {SUITE_DIR}
@@ -540,4 +540,4 @@ If the snapshot already exists (because a prior run already initialised it), re-
 node {SKILL_PATH}/scripts/fizz_sync.js {PROJECT_ROOT} --refresh-snapshot --meta-dir {META_DIR} --suite-dir {SUITE_DIR}
 ```
 
-This writes `{PROJECT_ROOT}/{META_DIR}/last-run.json` — a hash+signature snapshot of the in-scope contracts, handlers, and `PROPERTIES.md` entries. Later, when the user modifies sources and invokes `/fizz-sync`, that skill diffs against this file to detect added/removed/changed functions, quarantine stale properties, and regenerate only the drifted handler stubs.
+This writes `{PROJECT_ROOT}/{META_DIR}/last-run.json` — a hash+signature snapshot of the in-scope contracts, handlers, and `PROPERTIES.md` entries. Later, when the user modifies sources and invokes `/skill:fizz-sync`, that skill diffs against this file to detect added/removed/changed functions, quarantine stale properties, and regenerate only the drifted handler stubs.

@@ -1,12 +1,18 @@
 {
   "name": "pi-web3-hunter",
-  "version": "0.1.0",
+  "version": "0.1.0+codex.20260823110541",
   "description": "Scope-gated Web3 security hunting with reproducible evidence.",
   "author": {
     "name": "ArchdevilForge"
   },
   "license": "MIT",
-  "keywords": ["web3", "security", "bug-bounty", "solidity", "pi"],
+  "keywords": [
+    "web3",
+    "security",
+    "bug-bounty",
+    "solidity",
+    "pi"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Pi Web3 Hunter",
@@ -14,7 +20,11 @@
     "longDescription": "Runs a scope-gated Web3 audit workflow, invokes allowlisted local security tools, validates findings, and produces a hash-chained evidence report.",
     "developerName": "ArchdevilForge",
     "category": "Coding",
-    "capabilities": ["Interactive", "Read", "Write"],
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
     "defaultPrompt": [
       "Audit this authorized Solidity repository.",
       "Validate this Web3 finding on a local fork.",

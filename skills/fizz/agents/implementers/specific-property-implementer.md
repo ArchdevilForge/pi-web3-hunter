@@ -14,7 +14,7 @@ You implement SPECIFIC properties and wire all ghost/snapshot/property calls int
 - Read: `{SKILL_PATH}/references/property-generation.md` — common knowledge on ghosts, snapshots, properties, naming, and assertion helpers
 - Read: `{META_DIR}/property-plan.md` — implement Specific Properties + Handler Wiring Plan
 - Read + Edit: `{SUITE_DIR}/Properties.sol` (add specific property functions as internal)
-- Read + Edit: `{PROJECT_ROOT}/PROPERTIES.md` (flip `[ ]` → `[x]` for each SP-* property you actually implement AND wire into a handler; flip `[ ]` → `[-]` for any SP-* property you skip or leave as a TODO/commented stub — `[-]` means "do not auto-touch", so `/fizz-convert` will not retry it later)
+- Read + Edit: `{PROJECT_ROOT}/PROPERTIES.md` (flip `[ ]` → `[x]` for each SP-* property you actually implement AND wire into a handler; flip `[ ]` → `[-]` for any SP-* property you skip or leave as a TODO/commented stub — `[-]` means "do not auto-touch", so `/skill:fizz-convert` will not retry it later)
 - Read + Edit: `{SUITE_DIR}/handlers/<Contract>Handler.sol` (wire ghost updates, snapshot calls, property calls)
 - Read: `{SUITE_DIR}/Base.sol` (for ghosts struct and actor array)
 - Read: `{SUITE_DIR}/Snapshots.sol` (for snapshot state and before/after access)
@@ -35,7 +35,7 @@ Every property function you write MUST have its Spec ID as the first thing in it
 function property_<name>() internal { ... }
 ```
 
-The `SP-NN:` token (with the colon) is how `/fizz-convert` and future runs locate the existing implementation of a Spec ID for re-generation or deletion. Without it, automation cannot reconcile the spec with the code. This is a hard requirement, not a style preference.
+The `SP-NN:` token (with the colon) is how `/skill:fizz-convert` and future runs locate the existing implementation of a Spec ID for re-generation or deletion. Without it, automation cannot reconcile the spec with the code. This is a hard requirement, not a style preference.
 
 ```solidity
 // ――――――――――――――――――― Specific properties ――――――――――――――――――――
@@ -114,7 +114,7 @@ Note: Stateless properties are properties that must not pollute state, as they a
 
 For every `SP-*` property:
 - If you implemented it with a real assertion AND wired it into the relevant handler: change `- [ ] **SP-NN** ...` to `- [x] **SP-NN** ...`
-- If you skipped it or left it as a TODO/commented stub: change `- [ ] **SP-NN** ...` to `- [-] **SP-NN** ...`. This marks it as "do not auto-touch" so `/fizz-convert` will not retry it later.
+- If you skipped it or left it as a TODO/commented stub: change `- [ ] **SP-NN** ...` to `- [-] **SP-NN** ...`. This marks it as "do not auto-touch" so `/skill:fizz-convert` will not retry it later.
 
 Match by exact ID. Do NOT renumber, reorder, or rewrite other lines.
 

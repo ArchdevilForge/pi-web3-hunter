@@ -41,5 +41,5 @@ update skill to latest version
 ## Tips
 
 - **Run guided on first use.** Reviewing entry points and properties once shows exactly what the suite covers — then switch to automatic.
-- **Keep it in sync.** After changing contracts, run `/fizz-sync` to update the suite instead of regenerating it.
-- **Write properties in English.** Drop plain-English invariants into `PROPERTIES.md` and `/fizz-convert` turns them into Solidity.
+- **Keep it in sync.** After changing contracts, run `/skill:fizz-sync` to update the suite instead of regenerating it.
+- **Write properties in English.** Drop plain-English invariants into `PROPERTIES.md` and `/skill:fizz-convert` turns them into Solidity.

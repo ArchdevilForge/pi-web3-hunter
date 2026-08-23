@@ -50,7 +50,7 @@ Run sequentially:
 
    If the build still fails with `--skip 'test/**/*.sol'`, the source itself has a compile error. Stop and report it. Fuzz-sync cannot proceed without valid source artifacts.
 
-2. `node {SKILL_PATH}/../../scripts/extract_abis.js {PROJECT_ROOT} --meta-dir {META_DIR}`
+2. `node {SKILL_PATH}/../fizz/scripts/extract_abis.js {PROJECT_ROOT} --meta-dir {META_DIR}`
 
    This refreshes `contracts.json` from the latest artifacts. It overwrites the old file in place.
 
@@ -67,7 +67,7 @@ If the user passed `--init`:
 1. Run:
 
    ```
-   node {SKILL_PATH}/../../scripts/fizz_sync.js {PROJECT_ROOT} --init
+   node {SKILL_PATH}/../fizz/scripts/fizz_sync.js {PROJECT_ROOT} --init
    ```
 
 2. If the script reports the snapshot already exists, ask the user whether they want to overwrite with `--force` (they usually do NOT — it would erase drift history).
@@ -81,7 +81,7 @@ If the user passed `--init`:
 Run:
 
 ```
-node {SKILL_PATH}/../../scripts/fizz_sync.js {PROJECT_ROOT}
+node {SKILL_PATH}/../fizz/scripts/fizz_sync.js {PROJECT_ROOT}
 ```
 
 The script:
@@ -163,7 +163,7 @@ Print a warning listing every modified handler and ask the user whether to proce
 Run:
 
 ```
-node {SKILL_PATH}/../../scripts/fizz_sync.js {PROJECT_ROOT} --apply-handlers
+node {SKILL_PATH}/../fizz/scripts/fizz_sync.js {PROJECT_ROOT} --apply-handlers
 ```
 
 The script:
@@ -271,7 +271,7 @@ If it succeeds, proceed to snapshot refresh.
 Only after Step 6 succeeds and the user is happy with the result:
 
 ```
-node {SKILL_PATH}/../../scripts/fizz_sync.js {PROJECT_ROOT} --refresh-snapshot
+node {SKILL_PATH}/../fizz/scripts/fizz_sync.js {PROJECT_ROOT} --refresh-snapshot
 ```
 
 This overwrites `{META_DIR}/last-run.json` with the post-sync state. Future `fizz-sync` runs will diff against this new baseline.
@@ -313,7 +313,7 @@ Snapshot refreshed: {META_DIR}/last-run.json
 Tell the user:
 
 - For newly added functions without handler bodies: re-run `fizz` Step 7 for just those contracts, or use the `fizz-convert` skill if the user also wants to regenerate properties for them.
-- For quarantined properties: either rewrite them manually (flip `[~]` back to `[ ]` in `PROPERTIES.md` and run `/fizz-convert`), or leave them quarantined.
+- For quarantined properties: either rewrite them manually (flip `[~]` back to `[ ]` in `PROPERTIES.md` and run `/skill:fizz-convert`), or leave them quarantined.
 - For source-changed contracts without ABI drift: read the diff manually to confirm existing properties still encode the intended semantics.
 
 ---

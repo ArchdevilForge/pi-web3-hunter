@@ -161,7 +161,7 @@ After STEP 5 (build) confirms success:
 
 Match by exact Spec ID. Do NOT renumber, reorder, or rewrite other lines. Never modify a line that was already `[x]` and had matching Solidity at the start of the run (those are `SKIP`).
 
-Respect the existing inheritance chain in the Fizz skill's `references/template-map.md` if present — do not invent new files.
+Respect the existing inheritance chain in `../fizz/references/template-map.md` — do not invent new files.
 
 ---
 
