@@ -183,6 +183,29 @@ async function resolveScope(input: ScopeInput): Promise<ScopeManifest> {
   const workspace = await realpath(resolve(input.cwd));
   const createdAt = new Date().toISOString();
 
+  const URL_PATTERN = /^https?:\/\//i;
+  if (URL_PATTERN.test(input.target)) {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(input.target);
+    } catch (cause) {
+      throw new HuntError("INVALID_TARGET", `Target URL "${input.target}" is not valid`, { cause });
+    }
+    const programName = input.program && input.program !== "Local Workspace"
+      ? singleLineText(input.program, "program", 300)
+      : parsedUrl.hostname;
+    return {
+      kind: "url",
+      target: input.target.trim(),
+      targetRoot: workspace,
+      program: programName,
+      authorization: "user-attested",
+      ...(input.chainId ? { chainId: input.chainId } : {}),
+      ...(input.rpcUrl ? { rpcHost: normalizedRpcHost(input.rpcUrl) } : {}),
+      createdAt,
+    };
+  }
+
   if (ADDRESS_PATTERN.test(input.target)) {
     const chainId = input.chainId;
     if (!Number.isSafeInteger(chainId) || (chainId ?? 0) <= 0) {
@@ -791,4 +814,23 @@ export function formatRunSummary(summary: RunSummary): string {
     `Findings: ${summary.findings.confirmed} confirmed, ${summary.findings.candidate} candidate, ${summary.findings.killed} killed`,
     `Evidence: ${summary.runDirectory}`,
   ].join("\n");
+}
+
+export function resolveContractSourceEffect(
+  address: string,
+  chainId: number,
+  targetDir: string,
+): Effect.Effect<{ sourceFound: boolean; path: string; files: string[]; contractName?: string | undefined }, HuntError> {
+  return Effect.gen(function* () {
+    const multiChain = yield* MultiChainService;
+    return yield* multiChain.resolveContractSource(address, chainId, targetDir);
+  }).pipe(Effect.provide(MultiChainServiceLive));
+}
+
+export async function resolveContractSource(
+  address: string,
+  chainId: number,
+  targetDir: string,
+): Promise<{ sourceFound: boolean; path: string; files: string[]; contractName?: string | undefined }> {
+  return runHuntEffect(resolveContractSourceEffect(address, chainId, targetDir));
 }

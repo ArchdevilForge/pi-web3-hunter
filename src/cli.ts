@@ -55,7 +55,7 @@ async function main(argv: string[]): Promise<void> {
   const positionals = parsed.positionals;
   const firstArg = positionals[0];
 
-  if (parsed.values.help || firstArg === "help" || firstArg === "--help" || firstArg === "-h") {
+  if (parsed.values.help || !firstArg || firstArg === "help" || firstArg === "--help" || firstArg === "-h") {
     process.stdout.write(HELP);
     return;
   }

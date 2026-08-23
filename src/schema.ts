@@ -100,7 +100,7 @@ export const ArtifactSchema = Schema.Struct({
 });
 
 export interface ScopeManifest {
-  kind: "repository" | "contract";
+  kind: "repository" | "contract" | "url";
   target: string;
   targetRoot: string;
   program: string;
@@ -111,7 +111,7 @@ export interface ScopeManifest {
 }
 
 export const ScopeManifestSchema = Schema.Struct({
-  kind: Schema.Literal("repository", "contract"),
+  kind: Schema.Literal("repository", "contract", "url"),
   target: Schema.String,
   targetRoot: Schema.String,
   program: Schema.String,

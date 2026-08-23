@@ -62,7 +62,25 @@ function normalizedRpcHost(rpcUrl: string): string {
 }
 
 export async function findExecutable(name: string, targetRoot?: string): Promise<string | undefined> {
-  const pathEntries = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const standardFallbacks = home
+    ? [
+        join(home, ".cargo", "bin"),
+        join(home, ".config", ".foundry", "bin"),
+        join(home, ".foundry", "bin"),
+        join(home, ".local", "bin"),
+        join(home, "go", "bin"),
+        join(home, ".local", "share", "uv", "tools", "slither-analyzer", "bin"),
+        join(home, ".local", "share", "uv", "tools", "halmos", "bin"),
+      ]
+    : [];
+
+  const rawPathEntries = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  const hasSystemPaths = rawPathEntries.some(
+    (p) => p.startsWith("/usr") || p.startsWith("/bin") || p.includes(".local") || p.includes(".cargo") || p.includes(".config") || p.includes("go"),
+  );
+  const pathEntries = hasSystemPaths ? Array.from(new Set([...rawPathEntries, ...standardFallbacks])) : rawPathEntries;
+
   for (const entry of pathEntries) {
     if (!isAbsolute(entry)) continue;
     try {
@@ -84,6 +102,19 @@ function processEnvironment(rpcUrl?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { CI: "1", NO_COLOR: "1" };
   for (const key of allowedKeys) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  if (home) {
+    const extraPaths = [
+      join(home, ".cargo", "bin"),
+      join(home, ".config", ".foundry", "bin"),
+      join(home, ".foundry", "bin"),
+      join(home, ".local", "bin"),
+      join(home, "go", "bin"),
+      join(home, ".local", "share", "uv", "tools", "slither-analyzer", "bin"),
+      join(home, ".local", "share", "uv", "tools", "halmos", "bin"),
+    ];
+    env.PATH = Array.from(new Set([...(env.PATH ?? "").split(delimiter), ...extraPaths])).filter(Boolean).join(delimiter);
   }
   if (rpcUrl) env.ETH_RPC_URL = rpcUrl;
   return env;
@@ -210,11 +241,11 @@ export async function buildCommand(run: HuntRun, input: OperationInput): Promise
 
   switch (input.operation) {
     case "forge-build":
-      if (run.scope.kind !== "repository") throw new HuntError("INVALID_TARGET", "forge-build requires a repository target");
+      if (run.scope.kind === "contract") throw new HuntError("INVALID_TARGET", "forge-build requires a repository or workspace target");
       return { executable: "forge", args: ["build"], displayCommand: ["forge", "build"], cwd: root, env: processEnvironment() };
 
     case "forge-test": {
-      if (run.scope.kind !== "repository") throw new HuntError("INVALID_TARGET", "forge-test requires a repository target");
+      if (run.scope.kind === "contract") throw new HuntError("INVALID_TARGET", "forge-test requires a repository or workspace target");
       const args = ["test"];
       const matchPath = safeSelector(input.matchPath, "matchPath");
       const matchContract = safeSelector(input.matchContract, "matchContract");
@@ -233,7 +264,7 @@ export async function buildCommand(run: HuntRun, input: OperationInput): Promise
     }
 
     case "slither":
-      if (run.scope.kind !== "repository") throw new HuntError("INVALID_TARGET", "slither requires a repository target");
+      if (run.scope.kind === "contract") throw new HuntError("INVALID_TARGET", "slither requires a repository or workspace target");
       return {
         executable: "slither",
         args: [".", "--json", "-"],
@@ -243,7 +274,7 @@ export async function buildCommand(run: HuntRun, input: OperationInput): Promise
       };
 
     case "aderyn":
-      if (run.scope.kind !== "repository") throw new HuntError("INVALID_TARGET", "aderyn requires a repository target");
+      if (run.scope.kind === "contract") throw new HuntError("INVALID_TARGET", "aderyn requires a repository or workspace target");
       return {
         executable: "aderyn",
         args: [".", "--output", "report.json"],
@@ -253,7 +284,7 @@ export async function buildCommand(run: HuntRun, input: OperationInput): Promise
       };
 
     case "halmos": {
-      if (run.scope.kind !== "repository") throw new HuntError("INVALID_TARGET", "halmos requires a repository target");
+      if (run.scope.kind === "contract") throw new HuntError("INVALID_TARGET", "halmos requires a repository or workspace target");
       const args: string[] = [];
       const matchContract = safeSelector(input.matchContract, "matchContract");
       const matchTest = safeSelector(input.matchTest, "matchTest");
@@ -263,7 +294,7 @@ export async function buildCommand(run: HuntRun, input: OperationInput): Promise
     }
 
     case "echidna": {
-      if (run.scope.kind !== "repository") throw new HuntError("INVALID_TARGET", "echidna requires a repository target");
+      if (run.scope.kind === "contract") throw new HuntError("INVALID_TARGET", "echidna requires a repository or workspace target");
       if (!input.contractPath || !input.contractName) {
         throw new HuntError("INVALID_INPUT", "echidna requires contractPath and contractName");
       }
@@ -275,7 +306,7 @@ export async function buildCommand(run: HuntRun, input: OperationInput): Promise
     }
 
     case "medusa": {
-      if (run.scope.kind !== "repository") throw new HuntError("INVALID_TARGET", "medusa requires a repository target");
+      if (run.scope.kind === "contract") throw new HuntError("INVALID_TARGET", "medusa requires a repository or workspace target");
       const args = ["fuzz"];
       if (input.configPath) args.push("--config", await pathInside(root, input.configPath, "configPath"));
       return { executable: "medusa", args, displayCommand: ["medusa", ...args], cwd: root, env: processEnvironment() };

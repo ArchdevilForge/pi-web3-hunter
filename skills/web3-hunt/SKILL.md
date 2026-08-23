@@ -23,9 +23,9 @@ Write down concrete invariants and the state variables/functions that enforce th
 
 Completion: every permissionless value-moving entry point maps to its guards, writes, external calls, and at least one invariant.
 
-## 3. Hypotheses
+## 3. Hypotheses & On-Chain Forensics
 
-Read [`../web3-audit/SKILL.md`](../web3-audit/SKILL.md) for vulnerability-class patterns. Use [`../token-integration-analyzer/SKILL.md`](../token-integration-analyzer/SKILL.md) when arbitrary or non-standard tokens cross the trust boundary. Use [`../meme-coin-audit/SKILL.md`](../meme-coin-audit/SKILL.md) only for token/rug-risk targets.
+Read [`../web3-audit/SKILL.md`](../web3-audit/SKILL.md) for vulnerability-class patterns. Use [`../chain-trace/SKILL.md`](../chain-trace/SKILL.md) for zero-key on-chain forensics, holder cluster detection (DBSCAN), honeypot/rug-pull checks, and liquidity tracking. Use [`../token-integration-analyzer/SKILL.md`](../token-integration-analyzer/SKILL.md) when arbitrary or non-standard tokens cross the trust boundary. Use [`../meme-coin-audit/SKILL.md`](../meme-coin-audit/SKILL.md) for token/rug-risk targets.
 
 For each anomaly, state:
 

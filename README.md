@@ -8,7 +8,7 @@
 [![Node: >=20](https://img.shields.io/badge/Node.js-%3E=20-blue.svg)](https://nodejs.org)
 [![TypeScript: 5.9](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org)
 [![Powered by Effect-TS](https://img.shields.io/badge/Powered%20by-Effect--TS-purple.svg)](https://www.effect.website)
-[![Tests: Passing](https://img.shields.io/badge/Tests-5%2F5%20Passed-brightgreen.svg)]()
+[![Tests: Passing](https://img.shields.io/badge/Tests-6%2F6%20Passed-brightgreen.svg)]()
 
 *KISS Philosophy · Anti-Bamboozle Detached Auditor · Zero-Cheat PoC Synthesizer · Cryptographic Ledger*
 
@@ -18,7 +18,7 @@
 
 ## 🌟 Why `hunt`?
 
-In Web3 bug bounty (Immunefi, Cantina, Code4rena, Sherlock), **theoretical alerts and AI hallucinations have zero financial value**. A vulnerability is only real when backed by a deterministic, reproducible, executable **Proof of Concept (PoC)** on a pinned block.
+In Web3 bug bounty (Immunefi, Cantina, Code4rena, Sherlock), **theoretical alerts and AI hallucinations have zero financial value**. A vulnerability is only real when backed by a deterministic, reproducible, executable **Proof of Concept (PoC)** with measurable state delta on a pinned block.
 
 `hunt` is built from **first principles** with **[Effect-TS](https://www.effect.website/)** to bridge the gap between AI reasoning and deterministic blockchain validation:
 
@@ -28,12 +28,17 @@ In Web3 bug bounty (Immunefi, Cantina, Code4rena, Sherlock), **theoretical alert
 2. **Strict State Delta & Anti-Cheat PoC Engine**:
    - Findings require an executable Foundry test (`testExploit()`) demonstrating measurable economic gain ($\Delta\text{Balance} > 0$) or privilege takeover.
    - Prohibits `vm.store` cheatcode bypasses: exploits must use realistic transactions.
-3. **Full Effect-TS Service Architecture**:
+3. **Autonomous Hunt Loop (`/hunt auto`)**:
+   - Exa semantic radar combined with GitHub search to discover newly launched DeFi platforms and pull verified contracts.
+   - Continues deep auditing in local sandboxes until a real, confirmed vulnerability is captured and proven.
+4. **Zero-Key Verified Contract Pulling**:
+   - Automatically pulls multi-file Solidity source trees from Blockscout V2 and Sourcify for 8+ EVM networks without requiring any API keys.
+5. **Integrated `chain-trace` On-Chain Forensics**:
+   - 18 forensic analysis modules for honeypot detection, rug-pull analysis, DBSCAN holder cluster detection, and token flow tracing.
+6. **Full Effect-TS Service Architecture**:
    - Zero-leak resource management via `Scope` and `Effect.acquireRelease` (auto-teardown of Anvil forks and temporary sandboxes).
    - Pure typed errors (`HuntError`), structured concurrency (`Fibers`), and schema validation.
-4. **Built-in Multi-Chain Resolution**:
-   - Zero-config public RPC directory for 9 major EVM networks (Ethereum, Arbitrum, Base, Optimism, Polygon, BSC, Avalanche, Linea, Scroll).
-5. **Cryptographic SHA-256 Hash Chain**:
+7. **Cryptographic SHA-256 Hash Chain**:
    - Append-only event-sourcing ledger verifying that every command output, finding, and report is cryptographically linked and tamper-proof.
 
 ---
@@ -45,18 +50,21 @@ graph TD
     subgraph UI_Layer ["UI & Entry"]
         CLI["CLI: hunt [target]"]
         TUI["Pi TUI: /hunt [target]"]
+        AUTO["Auto Loop: /hunt auto [query]"]
     end
 
     subgraph Agent_Layer ["Pi Agent (Cognitive Layer)"]
+        EXA["Exa & GH Discovery Radar"]
         XRAY["X-Ray Threat Modeling"]
         INVAR["Invariant & Hypothesis Synthesis"]
         POC_GEN["Foundry Exploit PoC Drafting"]
+        FORENSICS["Chain-Trace On-Chain Forensics"]
     end
 
     subgraph Effect_Layer ["Effect-TS Services (Deterministic Muscle & Arbiter)"]
-        MULTI["MultiChainService (9 EVM Networks & Public RPCs)"]
+        MULTI["MultiChainService (8+ EVM Networks & Zero-Key Pulling)"]
         FORK["ForkService (Scoped Ephemeral Anvil Lifecycle)"]
-        SCAN["ScannerService (Forge, Slither, Aderyn, Halmos)"]
+        SCAN["ScannerService (Forge, Slither, Aderyn, Halmos, Echidna, Medusa)"]
         POC["PoCService (Anti-Cheat & State Delta Verification)"]
         AUDIT["DetachedAuditorService (Isolated 7-Gate Arbiter)"]
         LEDGER["LedgerService (SHA-256 Hash-Chained Event Sourcing)"]
@@ -64,6 +72,9 @@ graph TD
 
     CLI --> Agent_Layer
     TUI --> Agent_Layer
+    AUTO --> Agent_Layer
+    Agent_Layer --> EXA
+    Agent_Layer --> FORENSICS
     Agent_Layer --> XRAY
     XRAY --> INVAR
     INVAR --> SCAN
@@ -99,17 +110,19 @@ pi install $(pwd)
 
 ### 2. Scanner Prerequisites
 
-For full static and dynamic scanning capabilities, install the underlying toolchains:
+`hunt` automatically detects installed security scanners and falls back to standard user paths (`~/.cargo/bin`, `~/.config/.foundry/bin`, `~/.local/bin`, `~/go/bin`, `uv` tool dirs):
 
 | Tool | Category | Installation / Source |
 |---|---|---|
-| **Foundry** (`forge`, `cast`, `anvil`) | Core EVM Dev & Testing | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
-| **Slither** | Static Analysis | `pip3 install slither-analyzer` |
+| **Foundry** (`forge`, `cast`, `anvil`) | Core EVM Dev & Testing | `curl -L https://foundry.paradigm.xyz | bash && foundryup` |
+| **Slither** | Python Static Analysis | `uv tool install slither-analyzer` |
 | **Aderyn** | Fast Rust Static Analysis | `cargo install aderyn` |
-| **Halmos** | Symbolic Execution Formal Verifier | `pip3 install halmos` |
-| **Echidna** / **Medusa** | Invariant Fuzzing | [Crytic GitHub](https://github.com/crytic) |
+| **Halmos** | Symbolic Execution Formal Verifier | `uv tool install halmos` |
+| **Echidna** | Haskell Invariant Fuzzing | `gh release download -R crytic/echidna` |
+| **Medusa** | Go Parallel Invariant Fuzzer | `go install github.com/crytic/medusa@latest` |
+| **Docker** | Containerized Scanning | System package manager |
 
-Check environment health anytime with:
+Check scanner health anytime with:
 ```bash
 hunt check
 ```
@@ -118,22 +131,29 @@ hunt check
 
 ## 🎯 Usage (KISS Philosophy)
 
-Both in the terminal and in Pi TUI, everything uses the same single word: **`hunt`**.
+Both in the terminal and in Pi TUI, everything uses the same concise command: **`hunt`**.
 
 ### In Pi Interactive TUI (`/hunt`)
 
+Pi TUI includes **interactive autocomplete** (`/hunt ` + Tab / space):
+
 ```text
-# 1. Hunt current workspace repository (Default Goal mode)
-/hunt
+# 1. Autonomous Hunting Loop (Exa Search -> Auto-Audit -> Stop on Confirmed Bug)
+/hunt auto
+/hunt auto dex
+/hunt auto "base launchpad"
 
-# 2. Hunt a deployed smart contract (Auto-resolves Public RPC & Fork)
-/hunt 0x1234567890123456789012345678901234567890 -c 1
+# 2. Audit Current Workspace (Default Goal mode)
+/hunt .
 
-# 3. Choose hunting mode (goal / list / loop)
-/hunt -m list       # Serial queue for triaging multiple attack vectors
-/hunt -m loop       # Continuous invariant fuzzing until plateau
+# 3. Audit a Deployed Smart Contract (Auto-extracts verified source + local Anvil fork)
+/hunt 0x1F98431c8aD98523631AE4a59f267346ea31F984 -c 1
 
-# 4. Status, Reports & Verification
+# 4. Audit a DApp URL or GitHub Repository
+/hunt https://app.uniswap.org
+/hunt https://github.com/Uniswap/v3-core
+
+# 5. Status, Reports & Verification
 /hunt status        # Display live progress and confirmed findings
 /hunt report        # Build and export markdown audit report
 /hunt verify        # Verify cryptographic evidence ledger integrity
@@ -143,7 +163,7 @@ Both in the terminal and in Pi TUI, everything uses the same single word: **`hun
 ### In Terminal CLI (`hunt` or `pwh`)
 
 ```bash
-# Start a hunt on current directory or contract
+# Start a hunt on current directory, URL, or contract
 hunt [target] [-c <chain-id>] [-m <goal|list|loop>]
 
 # Subcommands
@@ -173,21 +193,19 @@ Every confirmed vulnerability recorded in the evidence ledger must pass all 7 cr
 
 ## 🌐 Supported Multi-Chain Networks
 
-Out-of-the-box support for zero-config public RPCs and explorers:
+Zero-config public RPCs and automated zero-key source code extraction (Blockscout V2 & Sourcify):
 
-| Chain ID | Network | Default Public RPCs |
-|:---:|---|---|
-| `1` | Ethereum Mainnet | `https://eth.llamarpc.com`, `https://cloudflare-eth.com` |
-| `10` | Optimism | `https://mainnet.optimism.io`, `https://optimism.llamarpc.com` |
-| `56` | BNB Smart Chain | `https://bsc-dataseed.binance.org`, `https://bsc.llamarpc.com` |
-| `137` | Polygon | `https://polygon-rpc.com`, `https://polygon.llamarpc.com` |
-| `8453` | Base | `https://mainnet.base.org`, `https://base.llamarpc.com` |
-| `42161` | Arbitrum One | `https://arb1.arbitrum.io/rpc`, `https://arbitrum.llamarpc.com` |
-| `43114` | Avalanche C-Chain | `https://api.avax.network/ext/bc/C/rpc` |
-| `59144` | Linea | `https://rpc.linea.build` |
-| `534352` | Scroll | `https://rpc.scroll.io` |
-
-*To use custom/private RPCs, set `WEB3_HUNTER_RPC_URL` or `ETH_RPC_URL`.*
+| Chain ID | Network | Default Public RPCs | Source Code Extractor |
+|:---:|---|---|:---:|
+| `1` | Ethereum Mainnet | `https://eth.llamarpc.com`, `https://cloudflare-eth.com` | Blockscout & Sourcify |
+| `8453` | Base | `https://mainnet.base.org`, `https://base.llamarpc.com` | Blockscout & Sourcify |
+| `42161` | Arbitrum One | `https://arb1.arbitrum.io/rpc`, `https://arbitrum.llamarpc.com` | Blockscout & Sourcify |
+| `10` | Optimism | `https://mainnet.optimism.io`, `https://optimism.llamarpc.com` | Blockscout & Sourcify |
+| `56` | BNB Smart Chain | `https://bsc-dataseed.binance.org`, `https://bsc.llamarpc.com` | Blockscout & Sourcify |
+| `137` | Polygon | `https://polygon-rpc.com`, `https://polygon.llamarpc.com` | Blockscout & Sourcify |
+| `43114` | Avalanche C-Chain | `https://api.avax.network/ext/bc/C/rpc` | Snowtrace & Sourcify |
+| `59144` | Linea | `https://rpc.linea.build` | Blockscout & Sourcify |
+| `534352` | Scroll | `https://rpc.scroll.io` | Blockscout & Sourcify |
 
 ---
 
@@ -209,5 +227,6 @@ npm run build
 ## 📄 License & Acknowledgements
 
 - **License**: This project is licensed under the [MIT License](LICENSE).
-- **Acknowledgements**: The bundled `fizz`, `solidity-auditor`, and `x-ray` skill workflows are adapted from [Pashov Audit Group Skills](https://github.com/pashov/skills), licensed under MIT © AI Skills Contributors.
-
+- **Acknowledgements**:
+  - `chain-trace` on-chain forensics modules integrated from [Xeron2000/chain-trace](https://github.com/Xeron2000/chain-trace).
+  - Bundled `fizz`, `solidity-auditor`, `report-writing`, and `x-ray` skill workflows adapted from [Pashov Audit Group Skills](https://github.com/pashov/skills), licensed under MIT © AI Skills Contributors.

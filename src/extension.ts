@@ -8,6 +8,7 @@ import {
   OPERATIONS,
   preflight,
   recordFinding,
+  resolveContractSource,
   runOperation,
   verifyRun,
   type FindingInput,
@@ -176,19 +177,61 @@ export default function web3Hunter(pi: ExtensionAPI) {
       const tokens = tokenize(rawArgs);
       const firstToken = tokens[0];
 
-      // Quick subcommands: help, status, report, verify, check
-      if (firstToken === "help" || firstToken === "--help" || firstToken === "-h" || firstToken === "?") {
+      // Quick subcommands: help / no args, auto/loop, status, report, verify, check
+      if (!firstToken || firstToken === "help" || firstToken === "--help" || firstToken === "-h" || firstToken === "?") {
         ctx.ui.notify(
           [
-            "🎯 Web3 Bug Hunter Commands:",
-            "/hunt                — Start hunt on current workspace (default)",
-            "/hunt 0x... -c 1     — Hunt an on-chain contract address",
-            "/hunt status         — Check active hunt progress & findings",
-            "/hunt report         — Generate markdown bounty report",
-            "/hunt check          — Check scanner tools availability",
-            "/hunt verify         — Verify evidence ledger integrity",
+            "🎯 Web3 Bug Hunter — 参数与使用提示：",
+            "",
+            "• 启动挖掘：",
+            "  /hunt .               — 审计当前工作区目录 (本地代码)",
+            "  /hunt <url>           — 审计 DApp 官网或 GitHub 仓库 (如 /hunt https://app.uniswap.org)",
+            "  /hunt 0x... -c 1      — 审计链上智能合约 (如 /hunt 0x... -c 1)",
+            "  /hunt auto [query]    — 自治挖掘循环: gh/search 寻找目标直至捕获真实漏洞",
+            "",
+            "• 状态与报告：",
+            "  /hunt status          — 查看当前挖掘进度与漏洞发现",
+            "  /hunt report          — 导出 Markdown 漏洞审计报告",
+            "  /hunt check           — 检查本地 9 大安全工具就绪状态",
+            "  /hunt verify          — 校验 SHA-256 加密证据账本",
           ].join("\n"),
           "info",
+        );
+        return;
+      }
+
+      if (firstToken === "auto" || firstToken === "loop") {
+        const query = tokens.slice(1).join(" ") || "new defi protocol launchpad";
+        ctx.ui.notify(`🚀 Web3 Autonomous Hunt Loop started (Query: ${query})`, "info");
+        pi.sendUserMessage(
+          `[Web3 Autonomous Hunt Loop]
+Your goal is to autonomously discover newly launched, real Web3 DeFi/launchpad platforms (using exa/web search as primary discovery, supplemented by gh search for ${query}), extract their real verified Solidity source code/repository into a local sandbox (/tmp/hunt-sandbox/<name>), and perform a comprehensive security audit using all available tools (web3_preflight, web3_pull_contract, slither, aderyn, invariant synthesis, and Foundry PoC verification).
+
+Loop Protocol:
+1. Discover & Target Selection (Exa Search Primary, GH Auxiliary):
+   - Primary: Use exa/web search to search for recently launched DeFi protocols, yield aggregators, DEXs, or launchpads (e.g. on Base, Arbitrum, Ethereum). Extract their official GitHub repository URL or verified smart contract address (0x...).
+   - Auxiliary: Use 'gh search repos' with star/activity filters (e.g. \`gh search repos "${query} stars:>10 topic:solidity"\`) to find authentic repositories.
+   - Verification: Ensure the target is an authentic project with real deployed contracts or genuine protocol architecture (filter out empty template repos or SEO spam).
+2. For each target in the queue:
+   a. If GitHub repo: clone to /tmp/hunt-sandbox/<name>.
+      If Contract Address: use \`web3_pull_contract(address, chainId)\` to pull full verified source tree into local workspace.
+   b. Launch hunt run: inspect code architecture, map state machines & threat model.
+   c. Run static analysis (slither/aderyn) and test invariants via Foundry/Anvil local fork against the live pinned state.
+   d. Evaluate against 7-Gate criteria using web3_record_finding.
+   e. IF a confirmed vulnerability is proven (all 7 gates pass with tangible balance delta / impact):
+      - Record the finding in evidence ledger.
+      - Generate final markdown bounty report via web3_build_report.
+      - STOP the loop, alert the user with the report location and PoC, so the user can submit the bounty!
+   f. IF no confirmed vulnerability is found after rigorous verification:
+      - Log brief summary and killed hypotheses.
+      - Clean up temporary sandbox if needed.
+      - Move to the NEXT target in the queue and repeat.
+
+Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
+          {
+            ...(ctx.isIdle() ? {} : { deliverAs: "followUp" as const }),
+            expandPromptTemplates: true,
+          },
         );
         return;
       }
@@ -264,15 +307,48 @@ export default function web3Hunter(pi: ExtensionAPI) {
     }
   };
 
+  const getHuntCompletions = (argumentPrefix: string) => {
+    const suggestions = [
+      { value: "auto", label: "auto [query]", description: "Autonomous loop: search targets via gh/search, audit until real bug found & recorded" },
+      { value: "auto dex", label: "auto dex", description: "Auto hunt loop on DEX / AMM targets" },
+      { value: "auto lending", label: "auto lending", description: "Auto hunt loop on Lending protocols" },
+      { value: "auto base", label: "auto base", description: "Auto hunt loop on Base chain targets" },
+      { value: "loop", label: "loop [query]", description: "Continuous hunt loop across discovered targets" },
+      { value: ".", label: ". (Current Workspace)", description: "Audit current workspace directory" },
+      { value: "status", label: "status", description: "Show active hunt progress & findings" },
+      { value: "report", label: "report", description: "Generate markdown bounty report" },
+      { value: "check", label: "check", description: "Check 9 security scanner tools availability" },
+      { value: "verify", label: "verify", description: "Verify cryptographic evidence ledger" },
+      { value: "-c 1", label: "-c 1 (Ethereum)", description: "Specify Ethereum Mainnet (Chain ID 1)" },
+      { value: "-c 8453", label: "-c 8453 (Base)", description: "Specify Base Mainnet (Chain ID 8453)" },
+      { value: "-c 42161", label: "-c 42161 (Arbitrum)", description: "Specify Arbitrum One (Chain ID 42161)" },
+      { value: "-c 56", label: "-c 56 (BSC)", description: "Specify BNB Smart Chain (Chain ID 56)" },
+      { value: "-m goal", label: "-m goal", description: "Goal-oriented autonomous hunting mode" },
+      { value: "-m list", label: "-m list", description: "Interactive step-by-step list mode" },
+      { value: "help", label: "help", description: "Show usage and parameter guide" },
+    ];
+
+    const prefix = argumentPrefix.trim().toLowerCase();
+    if (!prefix) return suggestions;
+    return suggestions.filter(
+      (item) =>
+        item.value.toLowerCase().includes(prefix) ||
+        item.label.toLowerCase().includes(prefix) ||
+        (item.description && item.description.toLowerCase().includes(prefix)),
+    );
+  };
+
   // Primary concise command: /hunt
   pi.registerCommand("hunt", {
-    description: "KISS Web3 Hunt: /hunt [target|status|report|verify|check] [-c <chain>] [-m <goal|list|loop>]",
+    description: "KISS Web3 Hunt: /hunt [target|auto|status|report|check] [-c <chain>] [-m <goal|list>]",
+    getArgumentCompletions: getHuntCompletions,
     handler: handleHuntCommand,
   });
 
   // Alias: /hunt-web3
   pi.registerCommand("hunt-web3", {
     description: "Alias for /hunt",
+    getArgumentCompletions: getHuntCompletions,
     handler: handleHuntCommand,
   });
 
@@ -289,6 +365,32 @@ export default function web3Hunter(pi: ExtensionAPI) {
       return {
         content: [{ type: "text", text: capabilities.map((item) => `${item.available ? "✓" : "✗"} ${item.name}${item.path ? `: ${item.path}` : ""}`).join("\n") }],
         details: { capabilities },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "web3_pull_contract",
+    label: "Web3 Pull Verified Contract",
+    description: "Fetch full verified Solidity source code tree and foundry.toml for any on-chain contract (via Blockscout / Sourcify zero-key API) into local workspace for offline fork testing.",
+    promptSnippet: "Pull verified contract source code from blockchain explorers",
+    promptGuidelines: TOOL_GUIDELINES,
+    parameters: Type.Object({
+      address: Type.String({ description: "EVM contract address (0x...)" }),
+      chainId: Type.Number({ description: "EIP-155 Chain ID (e.g. 1, 8453, 42161, 56)" }),
+    }),
+    executionMode: "sequential",
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const result = await resolveContractSource(params.address, params.chainId, ctx.cwd);
+      if (!result.sourceFound) {
+        return {
+          content: [{ type: "text", text: `No verified source found for ${params.address} on chain ${params.chainId}. Use bytecode analysis (cast code) instead.` }],
+          details: result,
+        };
+      }
+      return {
+        content: [{ type: "text", text: `✓ Verified source code for ${result.contractName ?? params.address} extracted (${result.files.length} Solidity files) to ${result.path}/src\nFoundry workspace initialized.` }],
+        details: result,
       };
     },
   });

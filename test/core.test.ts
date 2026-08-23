@@ -137,3 +137,34 @@ test("slash command tokenizer preserves quoted arguments", () => {
   assert.deepEqual(tokenize(`. --program "Example Bounty" --authorized`), [".", "--program", "Example Bounty", "--authorized"]);
   assert.throws(() => tokenize(`. --program "unterminated`), /Unclosed quote/);
 });
+
+test("createRun supports URL targets for DApp and web audits", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "pi-web3-hunter-url-"));
+  const previousState = process.env.WEB3_HUNTER_STATE_DIR;
+  process.env.WEB3_HUNTER_STATE_DIR = join(temporary, "state");
+
+  try {
+    const run = await createRun({
+      cwd: temporary,
+      target: "https://app.uniswap.org/#/swap",
+      program: "Uniswap DApp",
+      authorized: true,
+    });
+    assert.equal(run.scope.kind, "url");
+    assert.equal(run.scope.target, "https://app.uniswap.org/#/swap");
+    assert.equal(run.scope.program, "Uniswap DApp");
+
+    const runAutoProgram = await createRun({
+      cwd: temporary,
+      target: "https://docs.aave.com/developers",
+      program: "Local Workspace",
+      authorized: true,
+    });
+    assert.equal(runAutoProgram.scope.kind, "url");
+    assert.equal(runAutoProgram.scope.program, "docs.aave.com");
+  } finally {
+    if (previousState === undefined) delete process.env.WEB3_HUNTER_STATE_DIR;
+    else process.env.WEB3_HUNTER_STATE_DIR = previousState;
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
