@@ -206,7 +206,8 @@ npm run build
 
 ---
 
-## 📄 License
+## 📄 License & Acknowledgements
 
-This project is licensed under the [MIT License](LICENSE).
-Built with ❤️ for the Web3 security and bug bounty research community.
+- **License**: This project is licensed under the [MIT License](LICENSE).
+- **Acknowledgements**: The bundled `fizz`, `solidity-auditor`, and `x-ray` skill workflows are adapted from [Pashov Audit Group Skills](https://github.com/pashov/skills), licensed under MIT © AI Skills Contributors.
+
