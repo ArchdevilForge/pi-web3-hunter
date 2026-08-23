@@ -13,10 +13,10 @@
     "solidity"
   ],
   "bin": {
-    "hunt": "./dist/src/cli.js",
-    "pwh": "./dist/src/cli.js",
-    "pi-hunt": "./dist/src/cli.js",
-    "pi-web3-hunter": "./dist/src/cli.js"
+    "hunt": "dist/src/cli.js",
+    "pwh": "dist/src/cli.js",
+    "pi-hunt": "dist/src/cli.js",
+    "pi-web3-hunter": "dist/src/cli.js"
   },
   "files": [
     "dist",
