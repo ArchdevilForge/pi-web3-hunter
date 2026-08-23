@@ -176,7 +176,23 @@ export default function web3Hunter(pi: ExtensionAPI) {
       const tokens = tokenize(rawArgs);
       const firstToken = tokens[0];
 
-      // Quick subcommands: status, report, verify, check
+      // Quick subcommands: help, status, report, verify, check
+      if (firstToken === "help" || firstToken === "--help" || firstToken === "-h" || firstToken === "?") {
+        ctx.ui.notify(
+          [
+            "🎯 Web3 Bug Hunter Commands:",
+            "/hunt                — Start hunt on current workspace (default)",
+            "/hunt 0x... -c 1     — Hunt an on-chain contract address",
+            "/hunt status         — Check active hunt progress & findings",
+            "/hunt report         — Generate markdown bounty report",
+            "/hunt check          — Check scanner tools availability",
+            "/hunt verify         — Verify evidence ledger integrity",
+          ].join("\n"),
+          "info",
+        );
+        return;
+      }
+
       if (firstToken === "status") {
         const runId = currentOrRequested(currentRunId, tokens[1]);
         const summary = await updateWidget(ctx, runId);

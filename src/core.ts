@@ -200,7 +200,15 @@ async function resolveScope(input: ScopeInput): Promise<ScopeManifest> {
     };
   }
 
-  const candidate = await realpath(resolve(workspace, input.target));
+  let candidate: string;
+  try {
+    candidate = await realpath(resolve(workspace, input.target));
+  } catch {
+    throw new HuntError(
+      "INVALID_TARGET",
+      `Target "${input.target}" does not exist on disk. Run "/hunt" without arguments to hunt the current workspace, or pass an on-chain contract address (0x...).`,
+    );
+  }
   if (!isWithin(workspace, candidate)) {
     throw new HuntError("OUTSIDE_WORKSPACE", "Repository target must stay inside Pi's current workspace");
   }
