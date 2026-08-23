@@ -13,6 +13,9 @@
     "solidity"
   ],
   "bin": {
+    "hunt": "./dist/src/cli.js",
+    "pwh": "./dist/src/cli.js",
+    "pi-hunt": "./dist/src/cli.js",
     "pi-web3-hunter": "./dist/src/cli.js"
   },
   "files": [
@@ -34,10 +37,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test dist/test/core.test.js",
+    "test": "npm run build && node --test dist/test/*.test.js",
     "prepare": "npm run build"
   },
   "dependencies": {
+    "@effect/platform": "^0.97.1",
+    "@effect/platform-node": "^0.108.1",
     "effect": "3.22.1"
   },
   "peerDependencies": {

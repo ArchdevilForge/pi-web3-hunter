@@ -21,12 +21,18 @@ import {
   type ExtensionAPI,
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { generatePoCTemplate, PoCService, PoCServiceLive } from "./services/PoCService.js";
+import { DetachedAuditorService, DetachedAuditorServiceLive } from "./services/DetachedAuditorService.js";
+import { ScannerServiceLive } from "./services/ScannerService.js";
+import { Effect, Layer } from "effect";
 
 const SESSION_ENTRY = "pi-web3-hunter:active-run";
 const TOOL_GUIDELINES = [
   "Use Web3 Hunter tools for scanner execution and evidence handling during an active hunt.",
   "Keep testing inside the attested bounty scope and reproduce impact on local forks or test environments.",
   "Record a confirmed finding only after all seven validation gates pass with captured evidence.",
+  "Use web3_scaffold_poc to create verifiable Foundry PoC exploit contracts.",
+  "Use web3_detached_audit to independently verify findings via clean detached subprocess.",
 ];
 
 const OperationSchema = Type.Union(OPERATIONS.map((operation) => Type.Literal(operation)));
@@ -116,7 +122,7 @@ async function updateWidget(ctx: ExtensionContext, runId: string | undefined): P
 
 function currentOrRequested(currentRunId: string | undefined, requested?: string): string {
   const runId = requested ?? currentRunId;
-  if (!runId) throw new Error("No active Web3 hunt. Start one with /hunt-web3.");
+  if (!runId) throw new Error("No active Web3 hunt. Start one with /hunt.");
   return runId;
 }
 
@@ -165,71 +171,99 @@ export default function web3Hunter(pi: ExtensionAPI) {
     };
   });
 
-  pi.registerCommand("hunt-web3", {
-    description: "Start an authorized Web3 hunt: /hunt-web3 <target> --program <name> --authorized [--chain-id N]",
-    handler: async (rawArgs, ctx) => {
-      try {
-        const parsed = parseArgs({
-          args: tokenize(rawArgs),
-          allowPositionals: true,
-          strict: true,
-          options: {
-            program: { type: "string" },
-            authorized: { type: "boolean", default: false },
-            "chain-id": { type: "string" },
-          },
-        });
-        if (parsed.positionals.length !== 1 || !parsed.values.program) {
-          throw new Error("Usage: /hunt-web3 <target> --program <name> --authorized [--chain-id N]");
-        }
-        const chainValue = parsed.values["chain-id"];
-        const chainId = chainValue === undefined ? undefined : Number(chainValue);
-        const run = await createRun({
-          cwd: ctx.cwd,
-          target: parsed.positionals[0] ?? "",
-          program: parsed.values.program,
-          authorized: parsed.values.authorized,
-          ...(chainId !== undefined ? { chainId } : {}),
-          ...(process.env.WEB3_HUNTER_RPC_URL ? { rpcUrl: process.env.WEB3_HUNTER_RPC_URL } : {}),
-        });
-        currentRunId = run.id;
-        pi.appendEntry(SESSION_ENTRY, { runId: run.id });
-        ctx.ui.notify(`Web3 hunt started: ${run.id}`, "info");
-        await updateWidget(ctx, run.id);
-        pi.sendUserMessage(`/skill:web3-hunt run-id=${run.id} target=${run.scope.target}`, {
-          ...(ctx.isIdle() ? {} : { deliverAs: "followUp" as const }),
-          expandPromptTemplates: true,
-        });
-      } catch (error) {
-        ctx.ui.notify(errorMessage(error), "error");
-        throw error;
+  const handleHuntCommand = async (rawArgs: string, ctx: ExtensionContext) => {
+    try {
+      const tokens = tokenize(rawArgs);
+      const firstToken = tokens[0];
+
+      // Quick subcommands: status, report, verify, check
+      if (firstToken === "status") {
+        const runId = currentOrRequested(currentRunId, tokens[1]);
+        const summary = await updateWidget(ctx, runId);
+        if (summary) ctx.ui.notify(formatRunSummary(summary), "info");
+        return;
       }
-    },
+
+      if (firstToken === "report") {
+        const runId = currentOrRequested(currentRunId, tokens[1]);
+        const path = await buildReport(runId);
+        await updateWidget(ctx, runId);
+        ctx.ui.notify(`Report written: ${path}`, "info");
+        return;
+      }
+
+      if (firstToken === "verify") {
+        const runId = currentOrRequested(currentRunId, tokens[1]);
+        const result = await verifyRun(runId);
+        ctx.ui.notify(`Evidence valid: ${result.eventCount} events, ${result.artifactCount} artifacts`, "info");
+        return;
+      }
+
+      if (firstToken === "check" || firstToken === "preflight") {
+        const caps = await preflight();
+        ctx.ui.notify(caps.map((c) => `${c.available ? "✓" : "✗"} ${c.name}`).join("\n"), "info");
+        return;
+      }
+
+      // Starting a hunt
+      const parsed = parseArgs({
+        args: tokens,
+        allowPositionals: true,
+        strict: false,
+        options: {
+          chain: { type: "string", short: "c" },
+          "chain-id": { type: "string" },
+          program: { type: "string", short: "p" },
+          mode: { type: "string", short: "m", default: "goal" },
+          authorized: { type: "boolean", default: true },
+        },
+      });
+
+      const target = parsed.positionals[0] ?? ".";
+      const chainRaw = (parsed.values.chain as string | undefined) ?? (parsed.values["chain-id"] as string | undefined);
+      const chainId = chainRaw !== undefined ? Number(chainRaw) : undefined;
+      const programName = (parsed.values.program as string | undefined) ?? (target === "." ? "Local Workspace" : target);
+      const mode = (parsed.values.mode as string | undefined) ?? "goal";
+
+      const run = await createRun({
+        cwd: ctx.cwd,
+        target,
+        program: programName,
+        authorized: true,
+        ...(chainId !== undefined ? { chainId } : {}),
+        ...(process.env.WEB3_HUNTER_RPC_URL ? { rpcUrl: process.env.WEB3_HUNTER_RPC_URL } : {}),
+      });
+
+      currentRunId = run.id;
+      pi.appendEntry(SESSION_ENTRY, { runId: run.id });
+      ctx.ui.notify(`Web3 hunt (${mode}) started: ${run.id}`, "info");
+      await updateWidget(ctx, run.id);
+      pi.sendUserMessage(`/skill:web3-hunt run-id=${run.id} mode=${mode} target=${run.scope.target}`, {
+        ...(ctx.isIdle() ? {} : { deliverAs: "followUp" as const }),
+        expandPromptTemplates: true,
+      });
+    } catch (error) {
+      ctx.ui.notify(errorMessage(error), "error");
+      throw error;
+    }
+  };
+
+  // Primary concise command: /hunt
+  pi.registerCommand("hunt", {
+    description: "KISS Web3 Hunt: /hunt [target|status|report|verify|check] [-c <chain>] [-m <goal|list|loop>]",
+    handler: handleHuntCommand,
   });
 
-  pi.registerCommand("hunt-web3-status", {
-    description: "Show the current Web3 hunt status",
-    handler: async (args, ctx) => {
-      const runId = currentOrRequested(currentRunId, tokenize(args)[0]);
-      const summary = await updateWidget(ctx, runId);
-      if (summary) ctx.ui.notify(formatRunSummary(summary), "info");
-    },
-  });
-
-  pi.registerCommand("hunt-web3-report", {
-    description: "Build the current evidence-backed Web3 hunt report",
-    handler: async (args, ctx) => {
-      const runId = currentOrRequested(currentRunId, tokenize(args)[0]);
-      const path = await buildReport(runId);
-      await updateWidget(ctx, runId);
-      ctx.ui.notify(`Report written: ${path}`, "info");
-    },
+  // Alias: /hunt-web3
+  pi.registerCommand("hunt-web3", {
+    description: "Alias for /hunt",
+    handler: handleHuntCommand,
   });
 
   pi.registerTool({
     name: "web3_preflight",
     label: "Web3 Preflight",
-    description: "Check whether supported Web3 analysis tools are available without executing target code.",
+    description: "Check whether supported Web3 analysis tools (forge, slither, aderyn, halmos, echidna, medusa, anvil, cast, docker) are available.",
     promptSnippet: "Check local Web3 scanner availability",
     promptGuidelines: TOOL_GUIDELINES,
     parameters: Type.Object({}),
@@ -262,7 +296,7 @@ export default function web3Hunter(pi: ExtensionAPI) {
   pi.registerTool({
     name: "web3_run_tool",
     label: "Web3 Tool",
-    description: "Execute one allowlisted read-only Web3 scanner operation and capture stdout/stderr as hashed evidence.",
+    description: "Execute one allowlisted read-only Web3 scanner operation (forge-build, forge-test, slither, aderyn, halmos, echidna, medusa, cast-code) and capture stdout/stderr as hashed evidence.",
     promptSnippet: "Run an allowlisted Web3 scanner with evidence capture",
     promptGuidelines: TOOL_GUIDELINES,
     parameters: Type.Object({
@@ -309,6 +343,95 @@ export default function web3Hunter(pi: ExtensionAPI) {
         ...result.artifacts.map((artifact) => `${artifact.path} sha256:${artifact.sha256}`),
       ].join("\n");
       return { content: [{ type: "text", text }], details: result };
+    },
+  });
+
+  pi.registerTool({
+    name: "web3_scaffold_poc",
+    label: "Scaffold Foundry PoC",
+    description: "Generate a standard Foundry exploit test contract template in test/exploit/PoC_<findingId>.t.sol with balance & state delta assertions.",
+    promptSnippet: "Create a reproducible Foundry exploit test contract",
+    promptGuidelines: TOOL_GUIDELINES,
+    parameters: Type.Object({
+      runId: Type.Optional(Type.String()),
+      findingId: Type.String({ description: "Unique finding identifier (e.g. finding-01)" }),
+      targetContract: Type.String({ description: "Target contract address or name" }),
+      chainId: Type.Optional(Type.Integer({ default: 1 })),
+      forkBlock: Type.Optional(Type.Integer()),
+      setupLogic: Type.Optional(Type.String()),
+      exploitLogic: Type.Optional(Type.String()),
+    }),
+    executionMode: "sequential",
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const runId = currentOrRequested(currentRunId, params.runId);
+      const summary = await getRunSummary(runId);
+      const template = generatePoCTemplate({
+        findingTitle: params.findingId,
+        targetContract: params.targetContract,
+        chainId: params.chainId ?? 1,
+        ...(params.forkBlock !== undefined ? { forkBlock: params.forkBlock } : {}),
+        ...(params.setupLogic !== undefined ? { setupLogic: params.setupLogic } : {}),
+        ...(params.exploitLogic !== undefined ? { exploitLogic: params.exploitLogic } : {}),
+      });
+      const scaffoldEffect = Effect.gen(function* () {
+        const poc = yield* PoCService;
+        return yield* poc.scaffoldPoC(summary.run.scope.targetRoot, params.findingId, template);
+      }).pipe(Effect.provide(PoCServiceLive));
+      const filePath = await Effect.runPromise(scaffoldEffect);
+      return {
+        content: [{ type: "text", text: `PoC scaffolded at: ${filePath}` }],
+        details: { filePath, template },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "web3_detached_audit",
+    label: "Detached Audit Verification",
+    description: "Execute a detached, isolated 7-gate audit check on a candidate finding to verify PoC pass and non-falsifiability before recording.",
+    promptSnippet: "Run isolated 7-gate detached audit check",
+    promptGuidelines: TOOL_GUIDELINES,
+    parameters: Type.Object({
+      runId: Type.Optional(Type.String()),
+      title: Type.String(),
+      severity: SeveritySchema,
+      status: FindingStatusSchema,
+      rootCause: Type.String(),
+      impact: Type.String(),
+      reproduction: Type.String(),
+      gates: GatesSchema,
+      evidencePaths: Type.Array(Type.String(), { maxItems: 32 }),
+    }),
+    executionMode: "sequential",
+    async execute(_id, params, _signal, _onUpdate, _ctx) {
+      const runId = currentOrRequested(currentRunId, params.runId);
+      const summary = await getRunSummary(runId);
+      const auditLayer = DetachedAuditorServiceLive.pipe(
+        Layer.provide(ScannerServiceLive),
+        Layer.provide(PoCServiceLive),
+      );
+      const auditEffect = Effect.provide(
+        DetachedAuditorService.pipe(
+          Effect.flatMap((auditor) =>
+            auditor.auditFinding(summary.run, {
+              title: params.title,
+              severity: params.severity as Severity,
+              status: params.status,
+              rootCause: params.rootCause,
+              impact: params.impact,
+              reproduction: params.reproduction,
+              gates: params.gates,
+              evidencePaths: params.evidencePaths,
+            }),
+          ),
+        ),
+        auditLayer,
+      );
+      const result = await Effect.runPromise(auditEffect);
+      return {
+        content: [{ type: "text", text: `Detached Audit Result: ${result.approved ? "APPROVED ✓" : "REJECTED ✗"}\n${result.executionLog}${result.reason ? `\nReason: ${result.reason}` : ""}` }],
+        details: result,
+      };
     },
   });
 
