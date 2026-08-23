@@ -1,0 +1,60 @@
+{
+  "name": "pi-web3-hunter",
+  "version": "0.1.0",
+  "description": "Scope-gated Web3 security hunting for Pi with evidence-backed findings.",
+  "type": "module",
+  "license": "MIT",
+  "author": "ArchdevilForge",
+  "keywords": [
+    "pi-package",
+    "web3",
+    "security",
+    "bug-bounty",
+    "solidity"
+  ],
+  "bin": {
+    "pi-web3-hunter": "./dist/src/cli.js"
+  },
+  "files": [
+    ".codex-plugin",
+    "dist",
+    "skills",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/src/extension.js"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/test/core.test.js",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "effect": "3.22.1"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-tui": "0.84.2",
+    "@types/node": "26.0.0",
+    "typebox": "1.3.7",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
