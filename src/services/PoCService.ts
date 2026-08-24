@@ -98,6 +98,10 @@ export const PoCServiceLive = Layer.succeed(
         if (/\.add\s*\([^)]*FeeToken/u.test(sourceCode) && /vm\.prank\(owner\)/u.test(sourceCode)) {
           violations.push("Fee-on-transfer pool requires owner to whitelist attacker token — known intended non-support, notKnownOrIntended fails.");
         }
+        // ponytail: ERC4626 first-deposit inflation on mock empty vault is not realistic for deployed sfrxETH (large TVL, ZERO_SHARES, 7-day vesting)
+        if (((/VulnerableOZVault/u.test(sourceCode) && /supply\s*==\s*0\s*\?\s*assets/u.test(sourceCode)) || /MockSfrxVault/u.test(sourceCode)) && /deposit\s*\(\s*1\b/u.test(sourceCode)) {
+          violations.push("ERC4626 inflation on mock empty vault (supply=1) — real sfrxETH has large TVL, ZERO_SHARES revert and 7-day syncRewards vesting; realisticAttacker/notKnownOrIntended fail without real fork state");
+        }
         // Detect requirement of testExploit function
         if (!/function\s+testExploit/u.test(sourceCode) && !/function\s+test_exploit/u.test(sourceCode)) {
           violations.push("PoC contract must define `function testExploit()` or `function test_exploit()`.");

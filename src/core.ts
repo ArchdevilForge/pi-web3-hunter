@@ -626,6 +626,13 @@ export function recordFindingEffect(runId: string, input: FindingInput): Effect.
       if (pranksOwner && /\.add\s*\(/u.test(evidenceText) && normalized.gates.realisticAttacker) {
         return yield* Effect.fail(new HuntError("VALIDATION_FAILED", "Mechanical gate check failed: realisticAttacker=false (PoC pranks owner/admin to create pool) — record as killed"));
       }
+      // ponytail: ERC4626 mock empty-vault inflation — requires real fork state, not MockSfrxVault with supply=1
+      const isMockEmptyVault = (/VulnerableOZVault/u.test(evidenceText) && /supply\s*==\s*0\s*\?\s*assets/u.test(evidenceText)) || /MockSfrxVault/u.test(evidenceText);
+      const isInflationFinding = /First Deposit Inflation|ERC4626.*Inflation/u.test(normalized.title);
+      const noRealFork = !/0xac3E018457B222d93114458476f3E3416Abbe38F/u.test(evidenceText) || /MockSfrxVault/u.test(evidenceText);
+      if (isMockEmptyVault && isInflationFinding && noRealFork) {
+        return yield* Effect.fail(new HuntError("VALIDATION_FAILED", "Mechanical gate check failed: ERC4626 inflation on mock empty vault (supply=1) — real sfrxETH has large TVL, ZERO_SHARES revert and 7-day vesting; reproduce on real fork with actual totalSupply/totalAssets or record as killed"));
+      }
     }
     const { run, directory } = yield* Effect.tryPromise({
       try: () => readRunUnsafe(runId),

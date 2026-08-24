@@ -66,6 +66,16 @@ export const DetachedAuditorServiceLive = Layer.effect(
             corrected.notKnownOrIntended = false;
             reasons.push("notKnownOrIntended: MasterChef fee-on-transfer is documented as unsupported (Sushi fork) — known intended behavior");
           }
+          // ponytail: ERC4626 first-deposit inflation on mock empty vault (not real sfrxETH fork state)
+          const isMockEmptyVault = (/VulnerableOZVault/u.test(evidenceText) && /supply\s*==\s*0\s*\?\s*assets/u.test(evidenceText)) || /MockSfrxVault/u.test(evidenceText);
+          const isInflationFinding = /First Deposit Inflation|ERC4626.*Inflation|Donation.*Inflat/u.test(finding.title);
+          const noRealFork = !/0xac3E018457B222d93114458476f3E3416Abbe38F/u.test(evidenceText) || /MockSfrxVault/u.test(evidenceText);
+          if (isMockEmptyVault && isInflationFinding && noRealFork) {
+            corrected.realisticAttacker = false;
+            corrected.notKnownOrIntended = false;
+            corrected.rootCauseInScope = false;
+            reasons.push("realisticAttacker/notKnownOrIntended/rootCauseInScope: ERC4626 inflation on mock empty vault (supply=1, 1 wei + donation) — real sfrxETH has large TVL, ZERO_SHARES revert and 7-day vesting; requires real fork with actual totalSupply/totalAssets");
+          }
           const allPassed =
             corrected.reproduced &&
             corrected.impactInScope &&

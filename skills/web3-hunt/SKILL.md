@@ -58,7 +58,9 @@ Completion: every permissionless value-moving entry point maps to guards, writes
 
 Record unresolved hypotheses as `candidate`. Record disproved hypotheses as `killed`.
 
-> **陷阱直接 kill**：`MasterChef/ vault` 的 `fee-on-transfer / deflationary` 记账膨胀（`user.amount += _amount` 未用 `balanceOf delta`），若 `add()/addPool()` 为 `onlyOwner` 且 PoC 用 `vm.prank(owner)` 加白攻击者 Token → `realisticAttacker=false, notKnownOrIntended=false` 直接记 `killed`（Sushi Fork 已知不支持 fee token）。仅当池已白名单且有真实 TVL、攻击者无特权即可触发时才算。
+> **陷阱直接 kill**：
+> - `MasterChef/ vault` 的 `fee-on-transfer / deflationary` 记账膨胀（`user.amount += _amount` 未用 `balanceOf delta`），若 `add()/addPool()` 为 `onlyOwner` 且 PoC 用 `vm.prank(owner)` 加白攻击者 Token → `realisticAttacker=false, notKnownOrIntended=false` 直接记 `killed`（Sushi Fork 已知不支持 fee token）。仅当池已白名单且有真实 TVL、攻击者无特权即可触发时才算。
+> - `ERC4626 首充膨胀`（`supply==0?assets:assets*supply/totalAssets` 无 virtual offset）：若 PoC 用 `VulnerableOZVault/MockSfrxVault` 现场部署 `supply=1, 1 wei + donation` 的空池模拟，而非 `0xac3E` 本体在 `fork block` 的真实 `totalSupply/totalAssets` 快照（含 `ZERO_SHARES` revert 与 7 天 `syncRewards` vesting），一律 `killed`。真洞需在真实 TVL 池上 `previewDeposit==0` 且 `deposit` 不 revert。
 
 ### 4. Mainnet Fork Validation & Scaffold PoC
 
