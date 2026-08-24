@@ -15,7 +15,7 @@ export interface FiveAtomResult {
 // Known-issue DB — SCSVS C4.12 / OZ / Yearn / Sushi
 const KNOWN_ISSUES: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /fee.*transfer|deflationary/i, reason: "Sushi MasterChef fee-on-transfer: documented unsupported (add() onlyOwner + prank owner)" },
-  { pattern: /VulnerableOZVault|MockSfrxVault.*supply.*1|first deposit inflation/i, reason: "ERC4626 first-deposit inflation on mock empty vault (supply=1) — real vault has large TVL, ZERO_SHARES, 7-day vesting" },
+  { pattern: /VulnerableVault|VulnerableOZVault|MockSfrxVault.*supply.*1|first deposit inflation/i, reason: "ERC4626 first-deposit inflation on mock empty vault (supply=1) — real vault has large TVL, ZERO_SHARES, 7-day vesting" },
   { pattern: /yVault.*donation|donation.*pricePerShare|yVault.*balance\(\)/i, reason: "Yearn yVault donation griefing on large TVL — 38% share dilution but 1 wei loss at 10k size, not theft" },
   { pattern: /sfrxETH.*Mock|MockSfrxVault/i, reason: "sfrxETH mock not real fork state" },
 ];
@@ -35,7 +35,7 @@ export function checkScope(evidenceText: string, title: string): { pass: boolean
   }
   const claimsYVault = /yVault|sd3Crv|0xB176/i.test(title + evidenceText);
   const hasRealYVault = REAL_CONTRACTS.yVault!.test(evidenceText);
-  const hasMockYVault = /VulnerableOZVault/.test(evidenceText) && !hasRealYVault;
+  const hasMockYVault = /VulnerableVault|VulnerableOZVault/.test(evidenceText) && !hasRealYVault;
   if (claimsYVault && hasMockYVault) {
     return { pass: false, reason: "rootCauseInScope: claims yVault but PoC is mock VulnerableOZVault" };
   }
@@ -57,7 +57,7 @@ export function checkPermissionless(evidenceText: string): { pass: boolean; reas
 export function checkState(evidenceText: string, title: string): { pass: boolean; reason?: string } {
   const hasFork = /vm\.createSelectFork|fork-block|fork-url/i.test(evidenceText);
   const isInflation = /First Deposit Inflation|ERC4626.*Inflation|Donation/i.test(title) || /supply\s*==\s*0\s*\?\s*assets/.test(evidenceText);
-  const isMockEmpty = (/VulnerableOZVault/.test(evidenceText) && /supply\s*==\s*0\s*\?\s*assets/.test(evidenceText)) || /MockSfrxVault/.test(evidenceText);
+  const isMockEmpty = (/VulnerableVault|VulnerableOZVault/.test(evidenceText) && /supply\s*==\s*0\s*\?\s*assets/.test(evidenceText)) || /MockSfrxVault/.test(evidenceText) || /VulnerableVault/.test(evidenceText);
   const hasZeroSharesRevert = /ZERO_SHARES/.test(evidenceText);
   if (isInflation && isMockEmpty && !hasFork) {
     return { pass: false, reason: "state: ERC4626 inflation on mock empty vault without real fork (supply=1) — need real totalSupply/totalAssets snapshot" };
@@ -103,7 +103,7 @@ export function checkNovelty(evidenceText: string, title: string): { pass: boole
   for (const k of KNOWN_ISSUES) {
     if (k.pattern.test(hay)) {
       // Need to ensure it's not just mention but actual exploit pattern
-      const hasRealPattern = /FeeToken|MockSfrxVault|VulnerableOZVault|yVault.*donation/.test(evidenceText);
+      const hasRealPattern = /FeeToken|MockSfrxVault|VulnerableVault|VulnerableOZVault|yVault.*donation/.test(evidenceText);
       if (hasRealPattern) {
         return { pass: false, reason: `notKnownOrIntended: known issue — ${k.reason}` };
       }

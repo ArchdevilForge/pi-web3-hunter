@@ -98,7 +98,7 @@ export const PoCServiceLive = Layer.succeed(
         if (/\.add\s*\([^)]*FeeToken/u.test(sourceCode) && /vm\.prank\(owner\)/u.test(sourceCode)) {
           violations.push("Fee-on-transfer pool requires owner to whitelist attacker token — known intended (Sushi) notKnownOrIntended fails");
         }
-        if (((/VulnerableOZVault/u.test(sourceCode) && /supply\s*==\s*0\s*\?\s*assets/u.test(sourceCode)) || /MockSfrxVault/u.test(sourceCode)) && /deposit\s*\(\s*1\b/u.test(sourceCode)) {
+        if (((/VulnerableVault|VulnerableOZVault/u.test(sourceCode) && /supply\s*==\s*0\s*\?\s*assets/u.test(sourceCode)) || /MockSfrxVault/u.test(sourceCode) || /VulnerableVault/.test(sourceCode)) && /deposit\s*\(\s*1\b/u.test(sourceCode)) {
           violations.push("ERC4626 mock empty vault (supply=1) — real sfrxETH has large TVL, ZERO_SHARES revert and 7-day vesting; need real fork 0xac3E with actual totalSupply/totalAssets");
         }
         // yVault donation griefing: 38% share dilution but 1 wei loss is not economic
