@@ -91,16 +91,26 @@ export const PoCServiceLive = Layer.succeed(
         if (/vm\.store\s*\(/u.test(sourceCode)) {
           violations.push("Forbidden cheatcode `vm.store`: PoC must not alter contract storage directly; exploit must use realistic transaction calls.");
         }
-        // ponytail: pranking owner/privileged role invalidates realisticAttacker gate
-        if (/vm\.(startPrank|prank)\s*\(\s*owner\b/u.test(sourceCode) || /vm\.(startPrank|prank)\s*\([^)]*\.owner\(\)/u.test(sourceCode) || /vm\.prank\s*\(\s*0x[a-fA-F0-9]{40}\s*\)/u.test(sourceCode) && /owner|admin/i.test(sourceCode)) {
-          violations.push("Privileged prank `vm.prank(owner)`: PoC must not impersonate owner/admin to create pool/token — realisticAttacker fails (requires permissionless path).");
+        // ponytail: first-principles 5-atom pre-checks (scope/permissionless/state/economic/novelty)
+        if (/vm\.(startPrank|prank)\s*\(\s*owner\b/u.test(sourceCode) || /vm\.(startPrank|prank)\s*\([^)]*\.owner\(\)/u.test(sourceCode)) {
+          violations.push("Privileged prank `vm.prank(owner)`: realisticAttacker fails — requires permissionless path (add() is onlyOwner)");
         }
         if (/\.add\s*\([^)]*FeeToken/u.test(sourceCode) && /vm\.prank\(owner\)/u.test(sourceCode)) {
-          violations.push("Fee-on-transfer pool requires owner to whitelist attacker token — known intended non-support, notKnownOrIntended fails.");
+          violations.push("Fee-on-transfer pool requires owner to whitelist attacker token — known intended (Sushi) notKnownOrIntended fails");
         }
-        // ponytail: ERC4626 first-deposit inflation on mock empty vault is not realistic for deployed sfrxETH (large TVL, ZERO_SHARES, 7-day vesting)
         if (((/VulnerableOZVault/u.test(sourceCode) && /supply\s*==\s*0\s*\?\s*assets/u.test(sourceCode)) || /MockSfrxVault/u.test(sourceCode)) && /deposit\s*\(\s*1\b/u.test(sourceCode)) {
-          violations.push("ERC4626 inflation on mock empty vault (supply=1) — real sfrxETH has large TVL, ZERO_SHARES revert and 7-day syncRewards vesting; realisticAttacker/notKnownOrIntended fail without real fork state");
+          violations.push("ERC4626 mock empty vault (supply=1) — real sfrxETH has large TVL, ZERO_SHARES revert and 7-day vesting; need real fork 0xac3E with actual totalSupply/totalAssets");
+        }
+        // yVault donation griefing: 38% share dilution but 1 wei loss is not economic
+        if (/yVault|0xB176/u.test(sourceCode) && /transfer\s*\(\s*VAULT\s*,/.test(sourceCode) && /priceAfter|priceBefore/.test(sourceCode)) {
+          // not auto-fail, but require net profit log; flag if victim loss is 1 wei
+          if (/victimWithdrawn.*9999|victimLoss.*1\b/.test(sourceCode) && !/assertGt.*profit.*50000/.test(sourceCode)) {
+            violations.push("yVault donation: 38% share dilution but victim loss 1 wei at 10k size — economic fails (griefing, flash-loan donation not repayable); need dust 0-share with net profit > donation");
+          }
+        }
+        // Require real fork pin for inflation/donation findings
+        if ((/Inflation|Donation|pricePerShare|getPricePerFullShare/.test(sourceCode)) && !/vm\.createSelectFork/.test(sourceCode)) {
+          violations.push("pinnedAndRepeatable: inflation/donation finding requires vm.createSelectFork with pinned block + RPC");
         }
         // Detect requirement of testExploit function
         if (!/function\s+testExploit/u.test(sourceCode) && !/function\s+test_exploit/u.test(sourceCode)) {

@@ -607,31 +607,12 @@ export function recordFindingEffect(runId: string, input: FindingInput): Effect.
       try: () => validateFindingInput(input),
       catch: (cause) => toHuntError("INVALID_FINDING", cause),
     });
-    // ponytail: mechanical gate override — prevent privileged-prank fee-on-transfer false positives from being recorded as confirmed
+    // ponytail: first-principles 5-atom mechanical gate (scope/permissionless/state/economic/novelty) — no LLM trust
     if (normalized.status === "confirmed") {
-      let evidenceText = "";
-      for (const p of normalized.evidencePaths) {
-        const tryRead = (path: string) => Effect.promise(() => readFile(path, "utf8").then((s) => s, () => ""));
-        const a = isAbsolute(p) ? p : resolve(process.cwd(), p);
-        const b = isAbsolute(p) ? resolve(process.cwd(), p) : resolve("/tmp", p);
-        evidenceText += "\n" + (yield* tryRead(a));
-        if (b !== a) evidenceText += "\n" + (yield* tryRead(b));
-      }
-      const pranksOwner = /vm\.(startPrank|prank)\s*\(\s*owner\b/u.test(evidenceText) || /vm\.(startPrank|prank)\s*\([^)]*\.owner\(\)/u.test(evidenceText);
-      const createsFeePool = /\.add\s*\([^)]*FeeToken/u.test(evidenceText) || /add\s*\(\s*100\s*,\s*address\(feeToken\)/u.test(evidenceText);
-      const isFeeFinding = /fee.*transfer|deflationary|inflation/u.test(normalized.title) || /FeeToken/u.test(evidenceText);
-      if (pranksOwner && createsFeePool && isFeeFinding) {
-        return yield* Effect.fail(new HuntError("VALIDATION_FAILED", "Mechanical gate check failed: realisticAttacker=false (pranks owner to add attacker fee token, add() is onlyOwner) and notKnownOrIntended=false (MasterChef fee-on-transfer is documented unsupported) — record as killed"));
-      }
-      if (pranksOwner && /\.add\s*\(/u.test(evidenceText) && normalized.gates.realisticAttacker) {
-        return yield* Effect.fail(new HuntError("VALIDATION_FAILED", "Mechanical gate check failed: realisticAttacker=false (PoC pranks owner/admin to create pool) — record as killed"));
-      }
-      // ponytail: ERC4626 mock empty-vault inflation — requires real fork state, not MockSfrxVault with supply=1
-      const isMockEmptyVault = (/VulnerableOZVault/u.test(evidenceText) && /supply\s*==\s*0\s*\?\s*assets/u.test(evidenceText)) || /MockSfrxVault/u.test(evidenceText);
-      const isInflationFinding = /First Deposit Inflation|ERC4626.*Inflation/u.test(normalized.title);
-      const noRealFork = !/0xac3E018457B222d93114458476f3E3416Abbe38F/u.test(evidenceText) || /MockSfrxVault/u.test(evidenceText);
-      if (isMockEmptyVault && isInflationFinding && noRealFork) {
-        return yield* Effect.fail(new HuntError("VALIDATION_FAILED", "Mechanical gate check failed: ERC4626 inflation on mock empty vault (supply=1) — real sfrxETH has large TVL, ZERO_SHARES revert and 7-day vesting; reproduce on real fork with actual totalSupply/totalAssets or record as killed"));
+      const { validateFiveAtoms } = yield* Effect.promise(() => import("./services/FirstPrinciplesValidator.js"));
+      const five = yield* Effect.promise(() => validateFiveAtoms(normalized.evidencePaths, normalized.title));
+      if (!five.allPass) {
+        return yield* Effect.fail(new HuntError("VALIDATION_FAILED", `First-principles 5-atom check failed: ${five.reasons.join("; ")} — record as killed`));
       }
     }
     const { run, directory } = yield* Effect.tryPromise({
