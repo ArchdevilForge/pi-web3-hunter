@@ -62,9 +62,19 @@ import {
   DetachedAuditorService,
   DetachedAuditorServiceLive,
 } from "./services/DetachedAuditorService.js";
+import {
+  AutoTargetSelection,
+  CURATED_MAINNET_TARGETS,
+  ProtocolTarget,
+  ReconQueryOptions,
+  ReconService,
+  ReconServiceLive,
+} from "./services/ReconService.js";
 
 export {
   Artifact,
+  AutoTargetSelection,
+  CURATED_MAINNET_TARGETS,
   FindingInput,
   FindingRecord,
   FindingStatus,
@@ -73,6 +83,10 @@ export {
   HuntEvent,
   HuntRun,
   KNOWN_CHAINS,
+  ProtocolTarget,
+  ReconQueryOptions,
+  ReconService,
+  ReconServiceLive,
   OPERATIONS,
   Operation,
   OperationInput,
@@ -834,3 +848,49 @@ export async function resolveContractSource(
 ): Promise<{ sourceFound: boolean; path: string; files: string[]; contractName?: string | undefined }> {
   return runHuntEffect(resolveContractSourceEffect(address, chainId, targetDir));
 }
+
+export function searchReconTargetsEffect(
+  options?: ReconQueryOptions,
+): Effect.Effect<ProtocolTarget[], HuntError> {
+  return Effect.gen(function* () {
+    const recon = yield* ReconService;
+    return yield* recon.searchTargets(options);
+  }).pipe(Effect.provide(ReconServiceLive));
+}
+
+export async function searchReconTargets(options?: ReconQueryOptions): Promise<ProtocolTarget[]> {
+  return runHuntEffect(searchReconTargetsEffect(options));
+}
+
+export function getReconTargetEffect(id: string): Effect.Effect<ProtocolTarget, HuntError> {
+  return Effect.gen(function* () {
+    const recon = yield* ReconService;
+    return yield* recon.getTargetById(id);
+  }).pipe(Effect.provide(ReconServiceLive));
+}
+
+export async function getReconTarget(id: string): Promise<ProtocolTarget> {
+  return runHuntEffect(getReconTargetEffect(id));
+}
+
+export function pickAutoTargetEffect(
+  query?: string,
+  preferredChainId?: number,
+  excludeTargetIds?: string[],
+): Effect.Effect<AutoTargetSelection, HuntError> {
+  return Effect.gen(function* () {
+    const recon = yield* ReconService;
+    return yield* recon.pickAutoTarget(query, preferredChainId, excludeTargetIds);
+  }).pipe(Effect.provide(ReconServiceLive));
+}
+
+export async function pickAutoTarget(
+  query?: string,
+  preferredChainId?: number,
+  excludeTargetIds?: string[],
+): Promise<AutoTargetSelection> {
+  return runHuntEffect(pickAutoTargetEffect(query, preferredChainId, excludeTargetIds));
+}
+
+
+

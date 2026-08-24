@@ -1,15 +1,19 @@
 import { parseArgs } from "node:util";
+import { resolve } from "node:path";
 import { Type } from "typebox";
 import {
   buildReport,
   createRun,
   formatRunSummary,
+  getReconTarget,
   getRunSummary,
   OPERATIONS,
+  pickAutoTarget,
   preflight,
   recordFinding,
   resolveContractSource,
   runOperation,
+  searchReconTargets,
   verifyRun,
   type FindingInput,
   type Operation,
@@ -29,8 +33,11 @@ import { Effect, Layer } from "effect";
 
 const SESSION_ENTRY = "pi-web3-hunter:active-run";
 const TOOL_GUIDELINES = [
-  "Use Web3 Hunter tools for scanner execution and evidence handling during an active hunt.",
-  "Keep testing inside the attested bounty scope and reproduce impact on local forks or test environments.",
+  "Prioritize Mainnet deployed protocols with active TVL and clear Bug Bounty scopes (Immunefi / Cantina).",
+  "In autonomous hunt loop (/hunt auto), the hunt MUST NOT stop until a real, confirmed vulnerability with demonstrable economic impact is found.",
+  "When a target finishes with 0 confirmed findings (all hypotheses killed), DO NOT STOP. Call web3_auto_next_target to immediately switch to the next high-TVL protocol.",
+  "Always reproduce impact deterministically on local Mainnet forks (Forge --fork-url / Anvil) at a fixed block number.",
+  "Never execute attacks or write transactions directly against live blockchain networks.",
   "Record a confirmed finding only after all seven validation gates pass with captured evidence.",
   "Use web3_scaffold_poc to create verifiable Foundry PoC exploit contracts.",
   "Use web3_detached_audit to independently verify findings via clean detached subprocess.",
@@ -156,7 +163,7 @@ export default function web3Hunter(pi: ExtensionAPI) {
       systemPrompt: [
         "An authorized Web3 Hunter run is active.",
         ...TOOL_GUIDELINES,
-        "Host scanner commands must go through web3_run_tool; direct chain writes are outside this workflow.",
+        "Host scanner commands must go through web3_run_tool; direct chain writes are strictly prohibited.",
       ].join("\n"),
     };
   });
@@ -177,61 +184,76 @@ export default function web3Hunter(pi: ExtensionAPI) {
       const tokens = tokenize(rawArgs);
       const firstToken = tokens[0];
 
-      // Quick subcommands: help / no args, auto/loop, status, report, verify, check
-      if (!firstToken || firstToken === "help" || firstToken === "--help" || firstToken === "-h" || firstToken === "?") {
-        ctx.ui.notify(
-          [
-            "🎯 Web3 Bug Hunter — 参数与使用提示：",
-            "",
-            "• 启动挖掘：",
-            "  /hunt .               — 审计当前工作区目录 (本地代码)",
-            "  /hunt <url>           — 审计 DApp 官网或 GitHub 仓库 (如 /hunt https://app.uniswap.org)",
-            "  /hunt 0x... -c 1      — 审计链上智能合约 (如 /hunt 0x... -c 1)",
-            "  /hunt auto [query]    — 自治挖掘循环: gh/search 寻找目标直至捕获真实漏洞",
-            "",
-            "• 状态与报告：",
-            "  /hunt status          — 查看当前挖掘进度与漏洞发现",
-            "  /hunt report          — 导出 Markdown 漏洞审计报告",
-            "  /hunt check           — 检查本地 9 大安全工具就绪状态",
-            "  /hunt verify          — 校验 SHA-256 加密证据账本",
-          ].join("\n"),
-          "info",
-        );
-        return;
-      }
-
+      // Subcommand: auto / loop (Autonomous Mainnet Scout & Audit Loop)
       if (firstToken === "auto" || firstToken === "loop") {
-        const query = tokens.slice(1).join(" ") || "new defi protocol launchpad";
-        ctx.ui.notify(`🚀 Web3 Autonomous Hunt Loop started (Query: ${query})`, "info");
+        const query = tokens.slice(1).join(" ");
+        ctx.ui.notify(`Auto-scouting high-TVL Mainnet target${query ? ` for '${query}'` : ""}...`, "info");
+
+        const selection = await pickAutoTarget(query);
+        const targetDir = resolve(ctx.cwd, `${selection.target.id}-audit`);
+
+        ctx.ui.notify(`Scouted: ${selection.target.name} (${selection.primaryContract.name}) on [Chain ${selection.primaryChainId}] ${selection.chainName}\nPulling verified source...`, "info");
+        const fetchResult = await resolveContractSource(selection.primaryContract.address, selection.primaryChainId, targetDir);
+
+        const run = await createRun({
+          cwd: ctx.cwd,
+          target: fetchResult.sourceFound ? targetDir : selection.primaryContract.address,
+          program: selection.target.name,
+          authorized: true,
+          chainId: selection.primaryChainId,
+          ...(process.env.WEB3_HUNTER_RPC_URL ? { rpcUrl: process.env.WEB3_HUNTER_RPC_URL } : {}),
+        });
+
+        currentRunId = run.id;
+        pi.appendEntry(SESSION_ENTRY, { runId: run.id });
+        ctx.ui.notify(`✓ Autonomous hunt active: ${run.id} (${selection.target.name})`, "info");
+        await updateWidget(ctx, run.id);
+
         pi.sendUserMessage(
-          `[Web3 Autonomous Hunt Loop]
-Your goal is to autonomously discover newly launched, real Web3 DeFi/launchpad platforms (using exa/web search as primary discovery, supplemented by gh search for ${query}), extract their real verified Solidity source code/repository into a local sandbox (/tmp/hunt-sandbox/<name>), and perform a comprehensive security audit using all available tools (web3_preflight, web3_pull_contract, slither, aderyn, invariant synthesis, and Foundry PoC verification).
-
-Loop Protocol:
-1. Discover & Target Selection (Exa Search Primary, GH Auxiliary):
-   - Primary: Use exa/web search to search for recently launched DeFi protocols, yield aggregators, DEXs, or launchpads (e.g. on Base, Arbitrum, Ethereum). Extract their official GitHub repository URL or verified smart contract address (0x...).
-   - Auxiliary: Use 'gh search repos' with star/activity filters (e.g. \`gh search repos "${query} stars:>10 topic:solidity"\`) to find authentic repositories.
-   - Verification: Ensure the target is an authentic project with real deployed contracts or genuine protocol architecture (filter out empty template repos or SEO spam).
-2. For each target in the queue:
-   a. If GitHub repo: clone to /tmp/hunt-sandbox/<name>.
-      If Contract Address: use \`web3_pull_contract(address, chainId)\` to pull full verified source tree into local workspace.
-   b. Launch hunt run: inspect code architecture, map state machines & threat model.
-   c. Run static analysis (slither/aderyn) and test invariants via Foundry/Anvil local fork against the live pinned state.
-   d. Evaluate against 7-Gate criteria using web3_record_finding.
-   e. IF a confirmed vulnerability is proven (all 7 gates pass with tangible balance delta / impact):
-      - Record the finding in evidence ledger.
-      - Generate final markdown bounty report via web3_build_report.
-      - STOP the loop, alert the user with the report location and PoC, so the user can submit the bounty!
-   f. IF no confirmed vulnerability is found after rigorous verification:
-      - Log brief summary and killed hypotheses.
-      - Clean up temporary sandbox if needed.
-      - Move to the NEXT target in the queue and repeat.
-
-Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
+          `/skill:web3-hunt run-id=${run.id} mode=auto target="${selection.target.name}" targetId="${selection.target.id}" contract="${selection.primaryContract.name}:${selection.primaryContract.address}" chainId=${selection.primaryChainId} bountyUrl="${selection.target.bountyUrl}" workspace="${targetDir}"`,
           {
             ...(ctx.isIdle() ? {} : { deliverAs: "followUp" as const }),
             expandPromptTemplates: true,
           },
+        );
+        return;
+      }
+
+      // Subcommand: recon
+      if (firstToken === "recon" || firstToken === "targets") {
+        const query = tokens[1];
+        const targets = await searchReconTargets({ query });
+        const summary = targets
+          .map((t) => `• ${t.name} (${t.category.toUpperCase()} | Max: $${t.maxBountyUsd.toLocaleString()}) - ${t.bountyUrl}`)
+          .join("\n");
+        ctx.ui.notify(`Mainnet Bounty Targets (${targets.length}):\n${summary}`, "info");
+        return;
+      }
+
+      // Subcommand: fetch
+      if (firstToken === "fetch") {
+        const address = tokens[1];
+        const chainArg = tokens[2] === "-c" ? tokens[3] : tokens[2];
+        const chainId = chainArg ? Number(chainArg) : 1;
+        if (!address) {
+          ctx.ui.notify("Usage: /hunt fetch <contract-address> [-c <chainId>]", "warning");
+          return;
+        }
+        ctx.ui.notify(`Fetching verified source for ${address} (Chain ${chainId})...`, "info");
+        const res = await resolveContractSource(address, chainId, ctx.cwd);
+        if (res.sourceFound) {
+          ctx.ui.notify(`✓ Fetched ${res.contractName ?? address} (${res.files.length} files) to src/`, "info");
+        } else {
+          ctx.ui.notify(`✗ No verified source found for ${address}`, "error");
+        }
+        return;
+      }
+
+      // Quick subcommands: help / no args, auto/loop, status, report, verify, check
+      if (!firstToken || firstToken === "help" || firstToken === "--help" || firstToken === "-h") {
+        ctx.ui.notify(
+          "Usage:\n  /hunt auto [query] (Autonomous continuous hunt loop)\n  /hunt [target] [-c <chain>] [-m <goal|list>]\n  /hunt recon [query]\n  /hunt fetch <address> [-c <chain>]\n  /hunt status | report | check | verify",
+          "info",
         );
         return;
       }
@@ -264,7 +286,7 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
         return;
       }
 
-      // Starting a hunt
+      // Starting a manual hunt
       const parsed = parseArgs({
         args: tokens,
         allowPositionals: true,
@@ -309,11 +331,13 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
 
   const getHuntCompletions = (argumentPrefix: string) => {
     const suggestions = [
-      { value: "auto", label: "auto [query]", description: "Autonomous loop: search targets via gh/search, audit until real bug found & recorded" },
-      { value: "auto dex", label: "auto dex", description: "Auto hunt loop on DEX / AMM targets" },
-      { value: "auto lending", label: "auto lending", description: "Auto hunt loop on Lending protocols" },
-      { value: "auto base", label: "auto base", description: "Auto hunt loop on Base chain targets" },
-      { value: "loop", label: "loop [query]", description: "Continuous hunt loop across discovered targets" },
+      { value: "auto", label: "auto [query]", description: "Auto-scout top TVL mainnet protocol (Aave, Uniswap, etc.), fetch verified code & audit" },
+      { value: "auto dex", label: "auto dex", description: "Auto scout & hunt top DEX protocols (Uniswap, Curve, Aerodrome)" },
+      { value: "auto lending", label: "auto lending", description: "Auto scout & hunt top Lending protocols (Aave, Morpho)" },
+      { value: "auto base", label: "auto base", description: "Auto scout & hunt top protocols on Base network" },
+      { value: "auto arbitrum", label: "auto arbitrum", description: "Auto scout & hunt top protocols on Arbitrum" },
+      { value: "recon", label: "recon [query]", description: "Search high-TVL mainnet protocols & Immunefi bounty targets" },
+      { value: "fetch", label: "fetch <address> -c <chain>", description: "Pull verified source code & scaffold Foundry PoC" },
       { value: ".", label: ". (Current Workspace)", description: "Audit current workspace directory" },
       { value: "status", label: "status", description: "Show active hunt progress & findings" },
       { value: "report", label: "report", description: "Generate markdown bounty report" },
@@ -322,6 +346,7 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
       { value: "-c 1", label: "-c 1 (Ethereum)", description: "Specify Ethereum Mainnet (Chain ID 1)" },
       { value: "-c 8453", label: "-c 8453 (Base)", description: "Specify Base Mainnet (Chain ID 8453)" },
       { value: "-c 42161", label: "-c 42161 (Arbitrum)", description: "Specify Arbitrum One (Chain ID 42161)" },
+      { value: "-c 146", label: "-c 146 (Sonic)", description: "Specify Sonic Mainnet (Chain ID 146)" },
       { value: "-c 56", label: "-c 56 (BSC)", description: "Specify BNB Smart Chain (Chain ID 56)" },
       { value: "-m goal", label: "-m goal", description: "Goal-oriented autonomous hunting mode" },
       { value: "-m list", label: "-m list", description: "Interactive step-by-step list mode" },
@@ -340,7 +365,7 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
 
   // Primary concise command: /hunt
   pi.registerCommand("hunt", {
-    description: "KISS Web3 Hunt: /hunt [target|auto|status|report|check] [-c <chain>] [-m <goal|list>]",
+    description: "Web3 Hunt: /hunt [auto|recon|fetch|target|status|report|check] [-c <chain>] [-m <goal|list>]",
     getArgumentCompletions: getHuntCompletions,
     handler: handleHuntCommand,
   });
@@ -370,6 +395,107 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
   });
 
   pi.registerTool({
+    name: "web3_auto_next_target",
+    label: "Auto Scout Next Mainnet Target",
+    description: "In autonomous hunt loop, automatically discover and pull the next non-audited high-TVL mainnet protocol target, setup Foundry fork workspace, and initiate a new hunt run.",
+    promptSnippet: "Discover and fetch next mainnet protocol target in auto hunt loop",
+    promptGuidelines: TOOL_GUIDELINES,
+    parameters: Type.Object({
+      excludeTargetIds: Type.Optional(Type.Array(Type.String(), { description: "Target IDs already audited in this loop (e.g. ['aave-v3'])" })),
+      query: Type.Optional(Type.String({ description: "Category or keyword filter (e.g. 'dex', 'lending', 'base')" })),
+      preferredChainId: Type.Optional(Type.Integer({ description: "Preferred chain ID" })),
+    }),
+    executionMode: "sequential",
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const selection = await pickAutoTarget(params.query, params.preferredChainId, params.excludeTargetIds);
+      const targetDir = resolve(ctx.cwd, `${selection.target.id}-audit`);
+
+      const fetchResult = await resolveContractSource(
+        selection.primaryContract.address,
+        selection.primaryChainId,
+        targetDir,
+      );
+
+      const run = await createRun({
+        cwd: ctx.cwd,
+        target: fetchResult.sourceFound ? targetDir : selection.primaryContract.address,
+        program: selection.target.name,
+        authorized: true,
+        chainId: selection.primaryChainId,
+        ...(process.env.WEB3_HUNTER_RPC_URL ? { rpcUrl: process.env.WEB3_HUNTER_RPC_URL } : {}),
+      });
+
+      currentRunId = run.id;
+      pi.appendEntry(SESSION_ENTRY, { runId: run.id });
+      await updateWidget(ctx, run.id);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `✓ Auto-Switched to Next Mainnet Target: ${selection.target.name} (${selection.target.category.toUpperCase()})\n` +
+              `• Run ID: ${run.id}\n` +
+              `• Target ID: ${selection.target.id}\n` +
+              `• Contract: ${selection.primaryContract.name} (\`${selection.primaryContract.address}\`) on [Chain ${selection.primaryChainId}] ${selection.chainName}\n` +
+              `• Bounty Scope: ${selection.target.bountyUrl} (Max: $${selection.target.maxBountyUsd.toLocaleString()})\n` +
+              `• Workspace: ${targetDir}\n` +
+              `• Exploit PoC Scaffold: ${targetDir}/test/ExploitPoC.t.sol\n` +
+              `Now analyze this target. If all hypotheses killed and 0 confirmed, call web3_auto_next_target again with excludeTargetIds: ${JSON.stringify([...(params.excludeTargetIds ?? []), selection.target.id])}.`,
+          },
+        ],
+        details: { run, selection, fetchResult },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "web3_recon",
+    label: "Web3 Recon & Mainnet Scout",
+    description: "Search curated high-TVL mainnet protocols, active Immunefi / Cantina bug bounty programs, and verified in-scope contract addresses across Ethereum, Arbitrum, Base, BSC, Sonic, etc.",
+    promptSnippet: "Scout high-TVL mainnet protocols & bug bounty contracts",
+    promptGuidelines: TOOL_GUIDELINES,
+    parameters: Type.Object({
+      query: Type.Optional(Type.String({ description: "Protocol name or contract keyword (e.g. 'aave', 'uniswap', 'morpho')" })),
+      chainId: Type.Optional(Type.Integer({ description: "Filter by Chain ID (e.g. 1, 8453, 42161, 146)" })),
+      category: Type.Optional(Type.String({ description: "Filter by category (lending, dex, yield, liquid-staking, derivatives)" })),
+    }),
+    executionMode: "parallel",
+    async execute(_id, params) {
+      const targets = await searchReconTargets({
+        query: params.query,
+        chainId: params.chainId,
+        category: params.category,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: targets.length > 0
+              ? `Found ${targets.length} Mainnet Target(s):\n\n` +
+                targets
+                  .map(
+                    (t) =>
+                      `## ${t.name} (${t.category.toUpperCase()} | Max Bounty: $${t.maxBountyUsd.toLocaleString()})\n` +
+                      `• Bounty URL: ${t.bountyUrl} (${t.bountyPlatform})\n` +
+                      `• Chains & Contracts:\n` +
+                      t.chains
+                        .map(
+                          (c) =>
+                            `  - [Chain ${c.chainId}] ${c.chainName}:\n` +
+                            c.contracts.map((k) => `    * ${k.name} (${k.role}): \`${k.address}\``).join("\n"),
+                        )
+                        .join("\n"),
+                  )
+                  .join("\n\n")
+              : "No matching mainnet targets found.",
+          },
+        ],
+        details: { count: targets.length, targets },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "web3_pull_contract",
     label: "Web3 Pull Verified Contract",
     description: "Fetch full verified Solidity source code tree and foundry.toml for any on-chain contract (via Blockscout / Sourcify zero-key API) into local workspace for offline fork testing.",
@@ -377,7 +503,7 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
     promptGuidelines: TOOL_GUIDELINES,
     parameters: Type.Object({
       address: Type.String({ description: "EVM contract address (0x...)" }),
-      chainId: Type.Number({ description: "EIP-155 Chain ID (e.g. 1, 8453, 42161, 56)" }),
+      chainId: Type.Number({ description: "EIP-155 Chain ID (e.g. 1, 8453, 42161, 146, 56)" }),
     }),
     executionMode: "sequential",
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -389,7 +515,7 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
         };
       }
       return {
-        content: [{ type: "text", text: `✓ Verified source code for ${result.contractName ?? params.address} extracted (${result.files.length} Solidity files) to ${result.path}/src\nFoundry workspace initialized.` }],
+        content: [{ type: "text", text: `✓ Verified source code for ${result.contractName ?? params.address} extracted (${result.files.length} Solidity files) to ${result.path}/src\nFoundry workspace initialized with test/ExploitPoC.t.sol ready for fork testing.` }],
         details: result,
       };
     },
@@ -603,8 +729,12 @@ Begin Phase 1 (Exa Discovery & Real Target Selection) now.`,
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const runId = currentOrRequested(currentRunId, params.runId);
       const path = await buildReport(runId);
-      await updateWidget(ctx, runId);
-      return { content: [{ type: "text", text: `Report written: ${path}` }], details: { runId, path } };
+      const summary = await updateWidget(ctx, runId);
+      const text =
+        summary && summary.findings.confirmed === 0
+          ? `Report written: ${path} (0 confirmed findings). IN AUTO-MODE: DO NOT STOP OR OUTPUT TEXT TO THE USER. You must immediately call web3_auto_next_target to continue the loop.`
+          : `Report written: ${path}`;
+      return { content: [{ type: "text", text }], details: { runId, path, summary } };
     },
   });
 

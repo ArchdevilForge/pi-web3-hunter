@@ -122,3 +122,67 @@ test("DetachedAuditorService verifies 7 gates independently", async () => {
 
   await Effect.runPromise(effect);
 });
+
+import { ReconService, ReconServiceLive, CURATED_MAINNET_TARGETS } from "../src/services/ReconService.js";
+
+test("MultiChainService resolves expanded mainnet chains like Sonic, Berachain, Mantle", async () => {
+  const effect = Effect.gen(function* () {
+    const service = yield* MultiChainService;
+
+    const configSonic = yield* service.getChainConfig(146);
+    assert.equal(configSonic.name, "Sonic Mainnet");
+
+    const configBera = yield* service.getChainConfig(80094);
+    assert.equal(configBera.name, "Berachain");
+
+    const configMantle = yield* service.getChainConfig(5000);
+    assert.equal(configMantle.name, "Mantle");
+  }).pipe(Effect.provide(MultiChainServiceLive));
+
+  await Effect.runPromise(effect);
+});
+
+test("ReconService filters and retrieves live mainnet targets", async () => {
+  const effect = Effect.gen(function* () {
+    const recon = yield* ReconService;
+
+    const all = yield* recon.searchTargets();
+    assert.ok(all.length >= 4);
+
+    const aave = yield* recon.searchTargets({ query: "aave" });
+    assert.ok(aave.length >= 1);
+    assert.match(aave[0]?.name ?? "", /aave/i);
+
+    const baseTargets = yield* recon.searchTargets({ chainId: 8453 });
+    assert.ok(baseTargets.length >= 1);
+
+    const target = yield* recon.getTargetById(all[0]!.id);
+    assert.equal(target.id, all[0]!.id);
+  }).pipe(Effect.provide(ReconServiceLive));
+
+  await Effect.runPromise(effect);
+});
+
+test("ReconService.pickAutoTarget selects dynamic sweet-spot target, chain, and core contract", async () => {
+  const effect = Effect.gen(function* () {
+    const recon = yield* ReconService;
+
+    const defaultPick = yield* recon.pickAutoTarget();
+    assert.ok(defaultPick.target.id);
+    assert.ok(defaultPick.primaryChainId > 0);
+    assert.ok(defaultPick.primaryContract.address.startsWith("0x"));
+
+    const dexPick = yield* recon.pickAutoTarget("dex");
+    assert.ok(dexPick.target.name);
+
+    const basePick = yield* recon.pickAutoTarget("base");
+    assert.equal(basePick.primaryChainId, 8453);
+
+    // Test excludeTargetIds
+    const nextPick = yield* recon.pickAutoTarget(undefined, undefined, [defaultPick.target.id]);
+    assert.notEqual(nextPick.target.id, defaultPick.target.id);
+  }).pipe(Effect.provide(ReconServiceLive));
+
+  await Effect.runPromise(effect);
+});
+
