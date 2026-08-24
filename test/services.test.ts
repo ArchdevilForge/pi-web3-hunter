@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import {
   KNOWN_CHAINS,
@@ -54,12 +57,31 @@ test("PoCService validates exploit source and detects forbidden cheatcodes", asy
     const cheatCheck = yield* poc.validatePoCSource(cheatingPoC);
     assert.equal(cheatCheck.valid, false);
     assert.match(cheatCheck.reasons[0] ?? "", /Forbidden cheatcode `vm\.store`/);
+
+    const ownerPrankPoC = `
+      contract CheatTest {
+        function testExploit() public {
+          address owner = IMasterChef(MC).owner();
+          vm.prank(owner);
+          IMasterChef(MC).add(100, address(feeToken), false);
+        }
+      }
+    `;
+    const ownerCheck = yield* poc.validatePoCSource(ownerPrankPoC);
+    assert.equal(ownerCheck.valid, false);
+    assert.match(ownerCheck.reasons[0] ?? "", /Privileged prank/);
   }).pipe(Effect.provide(PoCServiceLive));
 
   await Effect.runPromise(effect);
 });
 
 test("DetachedAuditorService verifies 7 gates independently", async () => {
+  // Prepare fee-token owner-prank evidence file for gate test
+  const dir = join(tmpdir(), "pi-hunter-test-" + Date.now());
+  await mkdir(dir, { recursive: true });
+  const pocPath = join(dir, "poc.sol");
+  await writeFile(pocPath, "contract P { function testExploit() public { address owner = IMasterChef(MC).owner(); vm.prank(owner); IMasterChef(MC).add(100, address(feeToken), false); } } FeeToken", "utf8");
+
   const auditLayer = DetachedAuditorServiceLive.pipe(
     Layer.provide(ScannerServiceLive),
     Layer.provide(PoCServiceLive),
@@ -110,6 +132,12 @@ test("DetachedAuditorService verifies 7 gates independently", async () => {
     },
   };
 
+  const feeFindingWithFile: FindingInput = {
+    ...passingFinding,
+    title: "MasterChef - Fee-on-Transfer Accounting Inflation",
+    evidencePaths: [pocPath],
+  };
+
   const effect = Effect.gen(function* () {
     const auditor = yield* DetachedAuditorService;
     const passResult = yield* auditor.auditFinding(mockRun, passingFinding);
@@ -118,9 +146,16 @@ test("DetachedAuditorService verifies 7 gates independently", async () => {
     const failResult = yield* auditor.auditFinding(mockRun, failingFinding);
     assert.equal(failResult.approved, false);
     assert.match(failResult.reason ?? "", /reproduced/);
+
+    const feeResult = yield* auditor.auditFinding(mockRun, feeFindingWithFile);
+    assert.equal(feeResult.approved, false);
+    assert.match(feeResult.reason ?? "", /realisticAttacker/);
+    assert.equal(feeResult.gates.realisticAttacker, false);
+    assert.equal(feeResult.gates.notKnownOrIntended, false);
   }).pipe(Effect.provide(auditLayer));
 
   await Effect.runPromise(effect);
+  await rm(dir, { recursive: true, force: true });
 });
 
 import { ReconService, ReconServiceLive, CURATED_MAINNET_TARGETS } from "../src/services/ReconService.js";

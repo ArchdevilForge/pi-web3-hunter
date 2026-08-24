@@ -91,6 +91,13 @@ export const PoCServiceLive = Layer.succeed(
         if (/vm\.store\s*\(/u.test(sourceCode)) {
           violations.push("Forbidden cheatcode `vm.store`: PoC must not alter contract storage directly; exploit must use realistic transaction calls.");
         }
+        // ponytail: pranking owner/privileged role invalidates realisticAttacker gate
+        if (/vm\.(startPrank|prank)\s*\(\s*owner\b/u.test(sourceCode) || /vm\.(startPrank|prank)\s*\([^)]*\.owner\(\)/u.test(sourceCode) || /vm\.prank\s*\(\s*0x[a-fA-F0-9]{40}\s*\)/u.test(sourceCode) && /owner|admin/i.test(sourceCode)) {
+          violations.push("Privileged prank `vm.prank(owner)`: PoC must not impersonate owner/admin to create pool/token — realisticAttacker fails (requires permissionless path).");
+        }
+        if (/\.add\s*\([^)]*FeeToken/u.test(sourceCode) && /vm\.prank\(owner\)/u.test(sourceCode)) {
+          violations.push("Fee-on-transfer pool requires owner to whitelist attacker token — known intended non-support, notKnownOrIntended fails.");
+        }
         // Detect requirement of testExploit function
         if (!/function\s+testExploit/u.test(sourceCode) && !/function\s+test_exploit/u.test(sourceCode)) {
           violations.push("PoC contract must define `function testExploit()` or `function test_exploit()`.");

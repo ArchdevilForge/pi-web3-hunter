@@ -58,12 +58,14 @@ Completion: every permissionless value-moving entry point maps to guards, writes
 
 Record unresolved hypotheses as `candidate`. Record disproved hypotheses as `killed`.
 
+> **陷阱直接 kill**：`MasterChef/ vault` 的 `fee-on-transfer / deflationary` 记账膨胀（`user.amount += _amount` 未用 `balanceOf delta`），若 `add()/addPool()` 为 `onlyOwner` 且 PoC 用 `vm.prank(owner)` 加白攻击者 Token → `realisticAttacker=false, notKnownOrIntended=false` 直接记 `killed`（Sushi Fork 已知不支持 fee token）。仅当池已白名单且有真实 TVL、攻击者无特权即可触发时才算。
+
 ### 4. Mainnet Fork Validation & Scaffold PoC
 
 1. Use `web3_scaffold_poc` to construct a verifiable Foundry Exploit test in `test/exploit/PoC_<id>.t.sol` using Mainnet fork state (`forge test --fork-url <RPC> -vvvv`).
 2. Use `web3_run_tool` for allowlisted scanners (`forge-test`, `slither`, `aderyn`, `halmos`, `echidna`, `medusa`).
 3. Direct chain writes, live transaction broadcasts, and private keys are strictly prohibited. All attacks must be reproduced deterministically on a local fork at a pinned block number.
-4. Capture PoC output, traces, and state deltas. Run `web3_detached_audit` to independently confirm the 7 gates in a fresh detached subprocess. A finding becomes `confirmed` only when all seven fields passed to `web3_record_finding` are true:
+4. Capture PoC output, traces, and state deltas. Run `web3_detached_audit` to independently confirm the 7 gates in a fresh detached subprocess — **detached auditor 会机械扫描证据文件，若含 `vm.prank(owner)` 加池或 fee-token 套路则自动驳回 `realisticAttacker/notKnownOrIntended`**。A finding becomes `confirmed` only when all seven fields passed to `web3_record_finding` are true:
 
 1. `reproduced`
 2. `impactInScope`

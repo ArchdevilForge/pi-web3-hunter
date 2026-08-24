@@ -607,6 +607,26 @@ export function recordFindingEffect(runId: string, input: FindingInput): Effect.
       try: () => validateFindingInput(input),
       catch: (cause) => toHuntError("INVALID_FINDING", cause),
     });
+    // ponytail: mechanical gate override — prevent privileged-prank fee-on-transfer false positives from being recorded as confirmed
+    if (normalized.status === "confirmed") {
+      let evidenceText = "";
+      for (const p of normalized.evidencePaths) {
+        const tryRead = (path: string) => Effect.promise(() => readFile(path, "utf8").then((s) => s, () => ""));
+        const a = isAbsolute(p) ? p : resolve(process.cwd(), p);
+        const b = isAbsolute(p) ? resolve(process.cwd(), p) : resolve("/tmp", p);
+        evidenceText += "\n" + (yield* tryRead(a));
+        if (b !== a) evidenceText += "\n" + (yield* tryRead(b));
+      }
+      const pranksOwner = /vm\.(startPrank|prank)\s*\(\s*owner\b/u.test(evidenceText) || /vm\.(startPrank|prank)\s*\([^)]*\.owner\(\)/u.test(evidenceText);
+      const createsFeePool = /\.add\s*\([^)]*FeeToken/u.test(evidenceText) || /add\s*\(\s*100\s*,\s*address\(feeToken\)/u.test(evidenceText);
+      const isFeeFinding = /fee.*transfer|deflationary|inflation/u.test(normalized.title) || /FeeToken/u.test(evidenceText);
+      if (pranksOwner && createsFeePool && isFeeFinding) {
+        return yield* Effect.fail(new HuntError("VALIDATION_FAILED", "Mechanical gate check failed: realisticAttacker=false (pranks owner to add attacker fee token, add() is onlyOwner) and notKnownOrIntended=false (MasterChef fee-on-transfer is documented unsupported) — record as killed"));
+      }
+      if (pranksOwner && /\.add\s*\(/u.test(evidenceText) && normalized.gates.realisticAttacker) {
+        return yield* Effect.fail(new HuntError("VALIDATION_FAILED", "Mechanical gate check failed: realisticAttacker=false (PoC pranks owner/admin to create pool) — record as killed"));
+      }
+    }
     const { run, directory } = yield* Effect.tryPromise({
       try: () => readRunUnsafe(runId),
       catch: (cause) => toHuntError("STATE_READ_FAILED", cause),
